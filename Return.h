@@ -13,6 +13,7 @@ struct Return {
 	std::string errmsg;
 	
 	Return(bool s = true) : success(s) {}
+	Return(const char* errm) : success(false), errmsg(errm) {}
 	Return(const std::string& errm) : success(false), errmsg(errm) {}
 	Return(const Return& r, const std::string& extmsg) : success(false) {
 		if(r) errmsg = extmsg;
