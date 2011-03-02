@@ -23,8 +23,8 @@ static inline Return fread_bytes(FILE* f, char* d, size_t s) {
 }
 
 template<typename T>
-static inline Return fread_bytes(FILE* f, T d[]) {
-	ASSERT( fread_bytes(f, d, sizeof(T)/sizeof(d[0])) );
+static inline Return fread_bytes(FILE* f, T& d) {
+	ASSERT( fread_bytes(f, &d[0], sizeof(T)/sizeof(d[0])) );
 	return true;
 }
 

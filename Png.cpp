@@ -9,9 +9,12 @@
 #include <cstring>
 #include <stdint.h>
 
+#include <iostream>
+using namespace std;
+
 Return png_read_sig(FILE* f) {
 	static const char PNGSIG[8] = {137,80,78,71,13,10,26,10};
-	char sig[sizeof(PNGSIG)];
+	char sig[sizeof(PNGSIG)]; memset(sig, 0, sizeof(PNGSIG));
 	ASSERT( fread_bytes(f, sig) );
 	if(memcmp(PNGSIG, sig, sizeof(PNGSIG)) != 0)
 		return "PNG signature wrong";
@@ -43,11 +46,21 @@ uint32_t calc_crc(const char *buf, size_t len) {
 	return update_crc(0xffffffffL, buf, len) ^ 0xffffffffL;
 }
 
-uint32_t calc_crc(const std::string& s) { return calc_crc(&s[0], s.size()); }
+uint32_t calc_crc(const std::string& s) {
+	return calc_crc(&s[0], s.size());
+}
+
+uint32_t calc_crc(const std::string& s1, const std::string& s2) {
+	uint32_t c = 0xffffffffL;
+	c = update_crc(c, &s1[0], s1.size());
+	c = update_crc(c, &s2[0], s2.size());	
+	return c ^ 0xffffffffL;
+}
 
 Return png_read_chunk(FILE* f, PngChunk& chunk) {
 	uint32_t len;
-	ASSERT_EXT( fread_litendian<uint32_t>(f, len), "failed to read chunk len" );
+	ASSERT_EXT( fread_bigendian<uint32_t>(f, len), "failed to read chunk len" );
+	cout << "len: " << (size_t)len << endl;
 	
 	char type[4];
 	ASSERT_EXT( fread_bytes(f, type), "failed to read chunk type" );
@@ -55,13 +68,16 @@ Return png_read_chunk(FILE* f, PngChunk& chunk) {
 		if((unsigned char)type[i] < 32 || (unsigned char)type[i] >= 128)
 			return "chunk type invalid";
 	chunk.type = std::string(type, sizeof(type));
+	cout << "type: " << chunk.type << endl;
 	
 	chunk.data = std::string(len, 0);
 	ASSERT_EXT( fread_bytes(f, &chunk.data[0], len), "failed to read chunk data" );
 	
 	uint32_t crc;
-	ASSERT_EXT( fread_bytes(f, crc), "failed to read chunk crc" );
-	if(crc != calc_crc(chunk.data))
+	ASSERT_EXT( fread_bigendian<uint32_t>(f, crc), "failed to read chunk crc" );
+	cout << "crc: " << crc << endl;
+	cout << "calc_crc: " << calc_crc(chunk.type, chunk.data) << endl;
+	if(crc != calc_crc(chunk.type, chunk.data))
 		return "CRC does not match";
 	
 	return true;
