@@ -1,2 +1,4 @@
 *.bin
 *.dSYM
+*.deps
+*.o
