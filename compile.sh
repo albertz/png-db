@@ -34,8 +34,8 @@ function srccompile() {
 	g++ -c -MMD -MF "$f.deps" -o "$o" -iquote "$INCLUDE" -g "$f" || exit -1
 }
 
-# $1 - cpp-file
-# will link the o-file and other in CppCodeBase together
+# $1 - bin-file
+# will link all the $OBJS together
 function srclink() {
 	local b="$1"
 	checkdeps "$b" $OBJS && echo "uptodate: $b" && return 0
@@ -45,8 +45,6 @@ function srclink() {
 
 # compile all sources
 OBJS=""
-cd "."
-echo "> main"
 for f in *.cpp; do
 	srccompile "$f"
 	OBJS="$OBJS $(pwd)/${f/.cpp/.o}"
