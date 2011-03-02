@@ -13,11 +13,15 @@
 #include <cstring>
 
 static inline Return fread_bytes(FILE* f, char* d, size_t s) {
-	while(fread(d, s, 1, f) == 0) {
-		if(feof(f))
-			return "end-of-file";
-		if(ferror(f))
-			return "file-read-error";
+	if(fread(d, s, 1, f) > 0) return true;
+	while(s > 0) {
+		while(fread(d, 1, 1, f) == 0) {
+			if(feof(f))
+				return "end-of-file";
+			if(ferror(f))
+				return "file-read-error";
+		}
+		++d; --s;
 	}
 	return true;
 }
