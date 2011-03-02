@@ -18,7 +18,7 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 	
-	while(true) {
+	while(!feof(f) && !ferror(f)) {
 		PngChunk chunk;
 		Return r = png_read_chunk(f, chunk);
 		if(!r) {

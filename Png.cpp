@@ -60,7 +60,6 @@ uint32_t calc_crc(const std::string& s1, const std::string& s2) {
 Return png_read_chunk(FILE* f, PngChunk& chunk) {
 	uint32_t len;
 	ASSERT_EXT( fread_bigendian<uint32_t>(f, len), "failed to read chunk len" );
-	cout << "len: " << (size_t)len << endl;
 	
 	char type[4];
 	ASSERT_EXT( fread_bytes(f, type), "failed to read chunk type" );
@@ -68,15 +67,12 @@ Return png_read_chunk(FILE* f, PngChunk& chunk) {
 		if((unsigned char)type[i] < 32 || (unsigned char)type[i] >= 128)
 			return "chunk type invalid";
 	chunk.type = std::string(type, sizeof(type));
-	cout << "type: " << chunk.type << endl;
 	
 	chunk.data = std::string(len, 0);
 	ASSERT_EXT( fread_bytes(f, &chunk.data[0], len), "failed to read chunk data" );
 	
 	uint32_t crc;
 	ASSERT_EXT( fread_bigendian<uint32_t>(f, crc), "failed to read chunk crc" );
-	cout << "crc: " << crc << endl;
-	cout << "calc_crc: " << calc_crc(chunk.type, chunk.data) << endl;
 	if(crc != calc_crc(chunk.type, chunk.data))
 		return "CRC does not match";
 	
