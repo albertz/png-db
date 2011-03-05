@@ -51,12 +51,22 @@ struct PngHeader {
 	}
 };
 
+struct PngInterlacedPos {
+	short pass;
+	uint32_t row;
+	PngInterlacedPos() : pass(0), row(0) {}
+	void inc(uint32_t height);
+	size_t scanlineWidth(uint32_t width);
+};
+
 struct PngReader {
 	FILE* file;
 	z_stream stream;
 	PngHeader header;
 	bool hasInitialized, gotHeader, gotStreamEnd, gotEndChunk, hasFinishedReading;
 	std::list<PngChunk> chunks;
+	
+	PngInterlacedPos interlacedPos;
 	std::string incompleteScanline;
 	size_t incompleteScanlineOffset;
 	std::list<std::string> scanlines;

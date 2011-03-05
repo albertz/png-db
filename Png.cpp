@@ -74,48 +74,47 @@ static Return __PngReader_read_header(PngHeader& header, PngChunk& chunk) {
 	return true;
 }
 
-size_t __calcInterlacedScanlineWidth(uint32_t width, uint32_t height, size_t index) {
+void PngInterlacedPos::inc(uint32_t height) {
 	// TODO: more efficient ...
-	// code from http://www.w3.org/TR/PNG/#8Interlace
+	// see from http://www.w3.org/TR/PNG/#8Interlace
 	static const int starting_row[7]  = { 0, 0, 4, 0, 2, 0, 1 };
-	static const int starting_col[7]  = { 0, 4, 0, 2, 0, 1, 0 };
 	static const int row_increment[7] = { 8, 8, 8, 4, 4, 2, 2 };
-	static const int col_increment[7] = { 8, 8, 4, 4, 2, 2, 1 };
-	static const int block_height[7]  = { 8, 8, 4, 4, 2, 2, 1 };
-	static const int block_width[7]   = { 8, 4, 4, 2, 2, 1, 1 };
+	//static const int block_height[7]  = { 8, 8, 4, 4, 2, 2, 1 };
+	//static const int block_width[7]   = { 8, 4, 4, 2, 2, 1, 1 };
 	
-	size_t scanlineIndex = 0;
-	for(short pass = 0; pass < 7; ++pass)
-		for(long row = starting_row[pass]; row < height; row += row_increment[pass], ++scanlineIndex) {
-			size_t s = 0;
-			for(long col = starting_col[pass]; col < width; col += col_increment[pass], ++s) {
-				/*visit(row, col,
-					  min(block_height[pass], png.header.height - row),
-					  min(block_width[pass], png.header.width - col));*/
-			}
-			if(scanlineIndex >= index)
-				return s;
-		}
-
-	// should not happen; but width is safe to return here
-	return width;
+	if(pass >= 7) return;
+	
+	row += row_increment[pass];
+	if(row >= height) {
+		++pass;
+		if(pass < 7)
+			row = starting_row[pass];
+	}
 }
 
-static size_t __PngReader_scanlineSize(PngReader& png, size_t index) {
-	if(png.header.interlaceMethod == 0)
-		return png.header.scanlineSize(png.header.width);
-	else if(png.header.interlaceMethod == 1)
-		return png.header.scanlineSize(__calcInterlacedScanlineWidth(png.header.width, png.header.height, index));	
-	return 0; // we assume that this does not happen here
+size_t PngInterlacedPos::scanlineWidth(uint32_t width) {
+	if(pass >= 7) return width;
+
+	static const int starting_col[7]  = { 0, 4, 0, 2, 0, 1, 0 };
+	static const int col_increment[7] = { 8, 8, 4, 4, 2, 2, 1 };
+	
+	size_t s = 0;
+	for(long col = starting_col[pass]; col < width; col += col_increment[pass], ++s) {
+		/*visit(row, col,
+		 min(block_height[pass], png.header.height - row),
+		 min(block_width[pass], png.header.width - col));*/
+	}
+	return s;
 }
 
 static Return __PngReader_fill_scanlines(PngReader& png, char* data, size_t s) {
 	if(png.header.interlaceMethod > 1)
 		return "invalid/unknown interlace method";
 
-	size_t index = png.scanlines.size();
-	size_t scanlineSize = __PngReader_scanlineSize(png, index);
-
+	size_t scanlineSize = png.header.scanlineSize(png.header.width);
+	if(png.header.interlaceMethod == 1)
+		scanlineSize = png.header.scanlineSize(png.interlacedPos.scanlineWidth(png.header.width));
+	
 	while(s > 0) {
 		std::string& buf = png.incompleteScanline;
 		if(buf.size() != scanlineSize) {
@@ -132,10 +131,11 @@ static Return __PngReader_fill_scanlines(PngReader& png, char* data, size_t s) {
 		s -= nbytes_to_copy;
 		
 		if(png.incompleteScanlineOffset == scanlineSize) {
-			++index;
 			png.scanlines.push_back(buf);
-			if(png.header.interlaceMethod == 1)
-				scanlineSize = __PngReader_scanlineSize(png, index);
+			if(png.header.interlaceMethod == 1) {
+				png.interlacedPos.inc(png.header.height);
+				scanlineSize = png.header.scanlineSize(png.interlacedPos.scanlineWidth(png.header.width));
+			}
 			png.incompleteScanlineOffset = 0;
 		}
 	}
