@@ -1,3 +1,8 @@
+/* print some PNG info/stats
+ * by Albert Zeyer, 2011
+ * code under LGPL
+ */
+
 #include "Png.h"
 
 #include <cstdio>
