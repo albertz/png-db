@@ -45,6 +45,10 @@ struct PngHeader {
 	uint8_t bytesPerPixel() {
 		return (samplesPerPixel() * bitDepth + 7) / 8;
 	}
+	
+	uint32_t scanlineSize(uint32_t width) {
+		return (width * samplesPerPixel() * bitDepth + 7) / 8 + /* filter type byte */ 1;
+	}
 };
 
 struct PngReader {
