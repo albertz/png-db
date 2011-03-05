@@ -78,17 +78,12 @@ A million repetitions of "a"
 
 /* #define SHA1HANDSOFF  */
 
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
+#include <cstdio>
+#include <cstring>
 
-#include <stdio.h>
-#include <string.h>
+#include "Sha1.h"
 
-#include "os_types.h"
-#include "sha1.h"
-
-void SHA1_Transform(uint32_t state[5], const uint8_t buffer[64]);
+static void SHA1_Transform(uint32_t state[5], const uint8_t buffer[64]);
 
 #define rol(value, bits) (((value) << (bits)) | ((value) >> (32 - (bits))))
 
@@ -126,7 +121,7 @@ void SHAPrintContext(SHA1_CTX *context, char *msg){
 #endif /* VERBOSE */
 
 /* Hash a single 512-bit block. This is the core of the algorithm. */
-void SHA1_Transform(uint32_t state[5], const uint8_t buffer[64])
+static void SHA1_Transform(uint32_t state[5], const uint8_t buffer[64])
 {
     uint32_t a, b, c, d, e;
     typedef union {
@@ -185,21 +180,22 @@ void SHA1_Transform(uint32_t state[5], const uint8_t buffer[64])
 
 
 /* SHA1Init - Initialize new context */
-void SHA1_Init(SHA1_CTX* context)
+SHA1_CTX::SHA1_CTX()
 {
     /* SHA1 initialization constants */
-    context->state[0] = 0x67452301;
-    context->state[1] = 0xEFCDAB89;
-    context->state[2] = 0x98BADCFE;
-    context->state[3] = 0x10325476;
-    context->state[4] = 0xC3D2E1F0;
-    context->count[0] = context->count[1] = 0;
+    state[0] = 0x67452301;
+    state[1] = 0xEFCDAB89;
+    state[2] = 0x98BADCFE;
+    state[3] = 0x10325476;
+    state[4] = 0xC3D2E1F0;
+    count[0] = count[1] = 0;
 }
 
 
 /* Run your data through this. */
-void SHA1_Update(SHA1_CTX* context, const uint8_t* data, const size_t len)
+void SHA1_CTX::update(const uint8_t* data, const size_t len)
 {
+	SHA1_CTX* context = this;	
     size_t i, j;
 
 #ifdef VERBOSE
@@ -227,8 +223,10 @@ void SHA1_Update(SHA1_CTX* context, const uint8_t* data, const size_t len)
 
 
 /* Add padding and return the message digest. */
-void SHA1_Final(SHA1_CTX* context, uint8_t digest[SHA1_DIGEST_SIZE])
+std::string SHA1_CTX::final()
 {
+	uint8_t digest[SHA1_DIGEST_SIZE];
+	SHA1_CTX* context = this;
     uint32_t i;
     uint8_t  finalcount[8];
 
@@ -236,11 +234,11 @@ void SHA1_Final(SHA1_CTX* context, uint8_t digest[SHA1_DIGEST_SIZE])
         finalcount[i] = (unsigned char)((context->count[(i >= 4 ? 0 : 1)]
          >> ((3-(i & 3)) * 8) ) & 255);  /* Endian independent */
     }
-    SHA1_Update(context, (uint8_t *)"\200", 1);
+    update((uint8_t *)"\200", 1);
     while ((context->count[0] & 504) != 448) {
-        SHA1_Update(context, (uint8_t *)"\0", 1);
+        update((uint8_t *)"\0", 1);
     }
-    SHA1_Update(context, finalcount, 8);  /* Should cause a SHA1_Transform() */
+    update(finalcount, 8);  /* Should cause a SHA1_Transform() */
     for (i = 0; i < SHA1_DIGEST_SIZE; i++) {
         digest[i] = (uint8_t)
          ((context->state[i>>2] >> ((3-(i & 3)) * 8) ) & 255);
@@ -256,120 +254,6 @@ void SHA1_Final(SHA1_CTX* context, uint8_t digest[SHA1_DIGEST_SIZE])
 #ifdef SHA1HANDSOFF  /* make SHA1Transform overwrite its own static vars */
     SHA1_Transform(context->state, context->buffer);
 #endif
+	
+	return std::string((char*)digest, SHA1_DIGEST_SIZE);
 }
-
-/*************************************************************/
-
-#if 0
-int main(int argc, char** argv)
-{
-int i, j;
-SHA1_CTX context;
-unsigned char digest[SHA1_DIGEST_SIZE], buffer[16384];
-FILE* file;
-
-    if (argc > 2) {
-        puts("Public domain SHA-1 implementation - by Steve Reid <sreid@sea-to-sky.net>");
-        puts("Modified for 16 bit environments 7/98 - by James H. Brown <jbrown@burgoyne.com>");	/* JHB */
-        puts("Produces the SHA-1 hash of a file, or stdin if no file is specified.");
-        return(0);
-    }
-    if (argc < 2) {
-        file = stdin;
-    }
-    else {
-        if (!(file = fopen(argv[1], "rb"))) {
-            fputs("Unable to open file.", stderr);
-            return(-1);
-        }
-    }
-    SHA1_Init(&context);
-    while (!feof(file)) {  /* note: what if ferror(file) */
-        i = fread(buffer, 1, 16384, file);
-        SHA1_Update(&context, buffer, i);
-    }
-    SHA1_Final(&context, digest);
-    fclose(file);
-    for (i = 0; i < SHA1_DIGEST_SIZE/4; i++) {
-        for (j = 0; j < 4; j++) {
-            printf("%02X", digest[i*4+j]);
-        }
-        putchar(' ');
-    }
-    putchar('\n');
-    return(0);	/* JHB */
-}
-#endif
-
-/* self test */
-
-#ifdef TEST
-
-static char *test_data[] = {
-    "abc",
-    "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",
-    "A million repetitions of 'a'"};
-static char *test_results[] = {
-    "A9993E36 4706816A BA3E2571 7850C26C 9CD0D89D",
-    "84983E44 1C3BD26E BAAE4AA1 F95129E5 E54670F1",
-    "34AA973C D4C4DAA4 F61EEB2B DBAD2731 6534016F"};
-
-
-void digest_to_hex(const uint8_t digest[SHA1_DIGEST_SIZE], char *output)
-{
-    int i,j;
-    char *c = output;
-
-    for (i = 0; i < SHA1_DIGEST_SIZE/4; i++) {
-        for (j = 0; j < 4; j++) {
-            sprintf(c,"%02X", digest[i*4+j]);
-            c += 2;
-        }
-        sprintf(c, " ");
-        c += 1;
-    }
-    *(c - 1) = '\0';
-}
-
-int main(int argc, char** argv)
-{
-    int k;
-    SHA1_CTX context;
-    uint8_t digest[20];
-    char output[80];
-
-    fprintf(stdout, "verifying SHA-1 implementation... ");
-
-    for (k = 0; k < 2; k++){
-        SHA1_Init(&context);
-        SHA1_Update(&context, (uint8_t*)test_data[k], strlen(test_data[k]));
-        SHA1_Final(&context, digest);
-	digest_to_hex(digest, output);
-
-        if (strcmp(output, test_results[k])) {
-            fprintf(stdout, "FAIL\n");
-            fprintf(stderr,"* hash of \"%s\" incorrect:\n", test_data[k]);
-            fprintf(stderr,"\t%s returned\n", output);
-            fprintf(stderr,"\t%s is correct\n", test_results[k]);
-            return (1);
-        }
-    }
-    /* million 'a' vector we feed separately */
-    SHA1_Init(&context);
-    for (k = 0; k < 1000000; k++)
-        SHA1_Update(&context, (uint8_t*)"a", 1);
-    SHA1_Final(&context, digest);
-    digest_to_hex(digest, output);
-    if (strcmp(output, test_results[2])) {
-        fprintf(stdout, "FAIL\n");
-        fprintf(stderr,"* hash of \"%s\" incorrect:\n", test_data[2]);
-        fprintf(stderr,"\t%s returned\n", output);
-        fprintf(stderr,"\t%s is correct\n", test_results[2]);
-        return (1);
-    }
-
-    /* success */
-    fprintf(stdout, "ok\n");
-    return(0);
-}
-#endif /* TEST */
