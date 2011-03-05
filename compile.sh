@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# simple compile.sh script
+# by Albert Zeyer, 2010 or so
+# code under zlib
+
 cd "$(dirname $0)"
 ROOTDIR="$(pwd)"
 INCLUDE="$ROOTDIR"
