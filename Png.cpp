@@ -97,7 +97,7 @@ static Return __PngReader_read_data(PngReader& png, PngChunk& chunk) {
 
 static Return __PngReader_read(PngReader& png) {
 	if(png.gotEndChunk) {
-		if(png.gotStreamEnd) return true;
+		if(png.gotStreamEnd) return "cannot read more: already got end chunk";
 		return "zlib data stream incomplete";
 	}
 	if(feof(png.file)) return "end-of-file";
@@ -128,7 +128,7 @@ static Return __PngReader_read(PngReader& png) {
 }
 
 Return PngReader::read() {
-	if(hasFinishedReading) return true;
+	if(hasFinishedReading) return "cannot read more: finished already";
 	if(!hasInitialized) return __PngReader_init(*this);
 	if(!hasFinishedReading) {
 		ASSERT( __PngReader_read(*this) );
