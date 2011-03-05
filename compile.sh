@@ -3,6 +3,7 @@
 cd "$(dirname $0)"
 ROOTDIR="$(pwd)"
 INCLUDE="$ROOTDIR"
+BUILDDIR="build"
 
 # $1 - target
 # $... - deps
@@ -28,10 +29,12 @@ function listdeps() {
 # will compile the o-file
 function srccompile() {
 	local f="$1"
-	local o="${f/.cpp/.o}"
-	[ -e "$f.deps" ] && checkdeps "$o" "$f" $(listdeps "$f.deps") && echo "uptodate: $o" && return 0
+	local o="$BUILDDIR/${f/.cpp/.o}"
+	local deps="$BUILDDIR/$f.deps"
+	mkdir -p "$(dirname "$o")"
+	[ -e "$deps" ] && checkdeps "$o" "$f" $(listdeps "$deps") && echo "uptodate: $o" && return 0
 	echo "compiling $o"
-	g++ -c -MMD -MF "$f.deps" -o "$o" -iquote "$INCLUDE" -g "$f" || exit -1
+	g++ -c -MMD -MF "$deps" -o "$o" -iquote "$INCLUDE" -g "$f" || exit -1
 }
 
 # $1 - bin-file
@@ -47,7 +50,8 @@ function srclink() {
 OBJS=""
 for f in *.cpp; do
 	srccompile "$f"
-	OBJS="$OBJS $(pwd)/${f/.cpp/.o}"
+	OBJS="$OBJS $BUILDDIR/${f/.cpp/.o}"
 done
 
-srclink "test-png.bin" "-lz"
+mkdir -p bin
+srclink "bin/test-png" "-lz"

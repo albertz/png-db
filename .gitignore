@@ -2,3 +2,6 @@
 *.dSYM
 *.deps
 *.o
+bin
+build
+
