@@ -11,6 +11,10 @@ int main(int argc, char** argv) {
 	}
 	
 	FILE* f = fopen(argv[1], "r");
+	if(f == NULL) {
+		cout << "error: cannot open " << argv[1] << endl;
+		return 1;
+	}
 	PngReader reader(f);
 	bool haveSeenHeader = false;
 	while(!reader.hasFinishedReading) {
