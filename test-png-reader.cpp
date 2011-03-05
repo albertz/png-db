@@ -12,11 +12,23 @@ int main(int argc, char** argv) {
 	
 	FILE* f = fopen(argv[1], "r");
 	PngReader reader(f);
+	bool haveSeenHeader = false;
 	while(!reader.hasFinishedReading) {
 		Return r = reader.read();
 		if(!r) {
 			cout << "error: " << r.errmsg << endl;
 			return 1;
+		}
+		
+		if(!haveSeenHeader && reader.gotHeader) {
+			cout << "header: width=" << reader.header.width << ", height=" << reader.header.height << endl;
+			cout << "header: bitDepth=" << (int)reader.header.bitDepth << endl;
+			cout << "header: colorType=" << (int)reader.header.colourType << endl;
+			cout << "header: bytesPerPixel=" << (int)reader.header.bytesPerPixel() << endl;
+			cout << "header: compressionMethod=" << (int)reader.header.compressionMethod << endl;
+			cout << "header: filterMethod=" << (int)reader.header.filterMethod << endl;
+			cout << "header: interlaceMethod=" << (int)reader.header.interlaceMethod << endl;
+			haveSeenHeader = true;
 		}
 		
 		size_t s = 0;

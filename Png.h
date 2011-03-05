@@ -30,6 +30,21 @@ struct PngHeader {
 	uint8_t compressionMethod;
 	uint8_t filterMethod;
 	uint8_t interlaceMethod;
+	
+	uint8_t samplesPerPixel() {
+		switch(colourType) {
+			case 0: return 1; // greyscale
+			case 2: return 3; // truecolour
+			case 3: return 1; // indexed
+			case 4: return 2; // greyscale+alpha
+			case 6: return 4; // truecolour+alpha
+		}
+		return 1; // error anyway; return 1 to avoid infinite loops
+	}
+	
+	uint8_t bytesPerPixel() {
+		return (samplesPerPixel() * bitDepth + 7) / 8;
+	}
 };
 
 struct PngReader {
