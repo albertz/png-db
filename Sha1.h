@@ -9,13 +9,13 @@
 
 #define SHA1_DIGEST_SIZE 20
 
-struct SHA1_CTX {
+struct Sha1Context {
     uint32_t state[5];
     uint32_t count[2];
     uint8_t  buffer[64];
 
-	SHA1_CTX();
-	void update(const uint8_t* data, const size_t len);
+	Sha1Context();
+	void update(const char* data, size_t len);
 	std::string final();
 };
 
