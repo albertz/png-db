@@ -57,7 +57,9 @@ struct PngReader {
 	PngHeader header;
 	bool hasInitialized, gotHeader, gotStreamEnd, gotEndChunk, hasFinishedReading;
 	std::list<PngChunk> chunks;
-	std::list<std::string> dataStream;
+	std::string incompleteScanline;
+	size_t incompleteScanlineOffset;
+	std::list<std::string> scanlines;
 	
 	PngReader(FILE* f = NULL);
 	Return read();

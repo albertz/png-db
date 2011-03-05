@@ -53,6 +53,7 @@ PngReader::PngReader(FILE* f) {
 	stream.avail_in = 0;
 	stream.next_in = Z_NULL;
 	memset(&header, sizeof(PngHeader), 0);
+	incompleteScanlineOffset = 0;
 	hasInitialized = gotHeader = gotStreamEnd = gotEndChunk = hasFinishedReading = false;
 }
 
@@ -73,6 +74,75 @@ static Return __PngReader_read_header(PngHeader& header, PngChunk& chunk) {
 	return true;
 }
 
+size_t __calcInterlacedScanlineWidth(uint32_t width, uint32_t height, size_t index) {
+	// TODO: more efficient ...
+	// code from http://www.w3.org/TR/PNG/#8Interlace
+	static const int starting_row[7]  = { 0, 0, 4, 0, 2, 0, 1 };
+	static const int starting_col[7]  = { 0, 4, 0, 2, 0, 1, 0 };
+	static const int row_increment[7] = { 8, 8, 8, 4, 4, 2, 2 };
+	static const int col_increment[7] = { 8, 8, 4, 4, 2, 2, 1 };
+	static const int block_height[7]  = { 8, 8, 4, 4, 2, 2, 1 };
+	static const int block_width[7]   = { 8, 4, 4, 2, 2, 1, 1 };
+	
+	size_t scanlineIndex = 0;
+	for(short pass = 0; pass < 7; ++pass)
+		for(long row = starting_row[pass]; row < height; row += row_increment[pass], ++scanlineIndex) {
+			size_t s = 0;
+			for(long col = starting_col[pass]; col < width; col += col_increment[pass], ++s) {
+				/*visit(row, col,
+					  min(block_height[pass], png.header.height - row),
+					  min(block_width[pass], png.header.width - col));*/
+			}
+			if(scanlineIndex >= index)
+				return s;
+		}
+
+	// should not happen; but width is safe to return here
+	return width;
+}
+
+static size_t __PngReader_scanlineSize(PngReader& png, size_t index) {
+	if(png.header.interlaceMethod == 0)
+		return png.header.scanlineSize(png.header.width);
+	else if(png.header.interlaceMethod == 1)
+		return png.header.scanlineSize(__calcInterlacedScanlineWidth(png.header.width, png.header.height, index));	
+	return 0; // we assume that this does not happen here
+}
+
+static Return __PngReader_fill_scanlines(PngReader& png, char* data, size_t s) {
+	if(png.header.interlaceMethod > 1)
+		return "invalid/unknown interlace method";
+
+	size_t index = png.scanlines.size();
+	size_t scanlineSize = __PngReader_scanlineSize(png, index);
+
+	while(s > 0) {
+		std::string& buf = png.incompleteScanline;
+		if(buf.size() != scanlineSize) {
+			if(png.incompleteScanlineOffset == 0)
+				buf = std::string(scanlineSize, 0);
+			else
+				return "fill scanlines: bad state";
+		}
+		
+		size_t nbytes_to_copy = std::min(s, scanlineSize - png.incompleteScanlineOffset);
+		memcpy(&buf[png.incompleteScanlineOffset], data, nbytes_to_copy);
+		png.incompleteScanlineOffset += nbytes_to_copy;
+		data += nbytes_to_copy;
+		s -= nbytes_to_copy;
+		
+		if(png.incompleteScanlineOffset == scanlineSize) {
+			++index;
+			png.scanlines.push_back(buf);
+			if(png.header.interlaceMethod == 1)
+				scanlineSize = __PngReader_scanlineSize(png, index);
+			png.incompleteScanlineOffset = 0;
+		}
+	}
+	
+	return true;
+}
+
 static Return __PngReader_read_data(PngReader& png, PngChunk& chunk) {
 	png.stream.avail_in = chunk.data.size();
 	png.stream.next_in = (unsigned char*) &chunk.data[0];
@@ -90,7 +160,7 @@ static Return __PngReader_read_data(PngReader& png, PngChunk& chunk) {
 		}
 		size_t out_size = sizeof(outputData) - png.stream.avail_out;
 		if(out_size == 0) break;
-		png.dataStream.push_back( std::string(outputData, out_size) );
+		ASSERT( __PngReader_fill_scanlines(png, outputData, out_size) );
 	}
 	return true;
 }
@@ -105,7 +175,7 @@ static Return __PngReader_read(PngReader& png) {
 	
 	PngChunk chunk;
 	ASSERT( png_read_chunk(png.file, chunk) );
-	bool hadEarlierDataChunk = png.dataStream.size() > 0;
+	bool hadEarlierDataChunk = png.scanlines.size() > 0;
 	
 	if(chunk.type == "IDAT") {
 		if(!png.gotHeader) return "got data chunk but didn't got header";

@@ -37,7 +37,7 @@ int main(int argc, char** argv) {
 		}
 		
 		size_t s = 0;
-		for(std::list<std::string>::iterator i = reader.dataStream.begin(); i != reader.dataStream.end(); ++i)
+		for(std::list<std::string>::iterator i = reader.scanlines.begin(); i != reader.scanlines.end(); ++i)
 			s += i->size();
 		cout << "at " << ftell(f) << ": got " << s << " uncompressed" << endl;		
 	}
