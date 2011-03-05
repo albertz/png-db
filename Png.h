@@ -9,7 +9,9 @@
 #include "Return.h"
 
 #include <string>
+#include <list>
 #include <cstdio>
+#include <zlib.h>
 
 struct PngChunk {
 	std::string type;
@@ -18,5 +20,16 @@ struct PngChunk {
 
 Return png_read_sig(FILE* f);
 Return png_read_chunk(FILE* f, PngChunk& chunk);
+
+struct PngReader {
+	FILE* file;
+	z_stream stream;
+	bool gotStreamEnd, gotEndChunk;
+	std::list<PngChunk> chunks;
+	std::list<std::string> dataStream;
+	
+	PngReader(FILE* f = NULL);
+	Return read();
+};
 
 #endif
