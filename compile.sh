@@ -50,14 +50,17 @@ function srclink() {
 	g++ $OBJS -o "$b" $2 || exit -1
 }
 
-BINS="test-png.cpp"
+BINS=("test-png.cpp")
 
 # compile all sources
 OBJS=()
 for f in *.cpp; do
 	srccompile "$f"
-	OBJS=($OBJS "$BUILDDIR/${f/.cpp/.o}")
+	[[ ${BINS[(r)$f]} != $f ]] && \
+		OBJS=($OBJS "$BUILDDIR/${f/.cpp/.o}")
 done
 
 mkdir -p bin
-srclink "bin/test-png" "-lz"
+for b in $BINS; do
+	srclink "bin/${b/.cpp/}" "-lz"
+done
