@@ -80,9 +80,8 @@ Return __PngReader_read(PngReader& png) {
 			if(png.gotStreamEnd) return "got another IDAT chunk but zlib stream was already finished";
 			png.stream.avail_in = chunk.data.size();
 			png.stream.next_in = (unsigned char*) &chunk.data[0];
-			chunk.data = ""; // reset because we don't want to keep this in the stored chunk list
 			while(true) {
-				char outputData[8192];
+				char outputData[1024*128];
 				png.stream.avail_out = sizeof(outputData);
 				png.stream.next_out = (unsigned char*) outputData;
 				int ret = inflate(&png.stream, Z_NO_FLUSH);
@@ -98,6 +97,7 @@ Return __PngReader_read(PngReader& png) {
 				cout << "at " << ftell(png.file) << ": got " << out_size << " uncompressed" << endl;
 				png.dataStream.push_back( std::string(outputData, out_size) );
 			}
+			chunk.data = ""; // reset because we don't want to keep this in the stored chunk list
 		}
 		
 		// store the chunk. but only one single (empty) reference to IDAT.
