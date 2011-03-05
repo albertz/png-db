@@ -44,10 +44,12 @@ function srccompile() {
 # $1 - bin-file
 # will link all the $OBJS together
 function srclink() {
-	local b="$1"
-	checkdeps $b $OBJS && echo "uptodate: $b" && return 0
+	local cpp="$1"
+	local o="$BUILDDIR/${cpp/.cpp/.o}"
+	local b="bin/${cpp/.cpp/}"
+	checkdeps $b $OBJS $o && echo "uptodate: $b" && return 0
 	echo "linking $b"
-	g++ $OBJS -o "$b" $2 || exit -1
+	g++ $OBJS $o -o $b $2 || exit -1
 }
 
 BINS=("test-png.cpp")
@@ -56,11 +58,11 @@ BINS=("test-png.cpp")
 OBJS=()
 for f in *.cpp; do
 	srccompile "$f"
-	[[ ${BINS[(r)$f]} != $f ]] && \
+	[[ ${BINS[(i)$f]} -gt ${#BINS} ]] && \
 		OBJS=($OBJS "$BUILDDIR/${f/.cpp/.o}")
 done
 
 mkdir -p bin
 for b in $BINS; do
-	srclink "bin/${b/.cpp/}" "-lz"
+	srclink $b "-lz"
 done
