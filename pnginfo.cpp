@@ -11,13 +11,13 @@ using namespace std;
 
 int main(int argc, char** argv) {
 	if(argc <= 1) {
-		cout << "please give me a filename" << endl;
+		cerr << "please give me a filename" << endl;
 		return 1;
 	}
 	
 	FILE* f = fopen(argv[1], "r");
 	if(f == NULL) {
-		cout << "error: cannot open " << argv[1] << endl;
+		cerr << "error: cannot open " << argv[1] << endl;
 		return 1;
 	}
 	PngReader reader(f);
@@ -25,7 +25,7 @@ int main(int argc, char** argv) {
 	while(!reader.hasFinishedReading) {
 		Return r = reader.read();
 		if(!r) {
-			cout << "error: " << r.errmsg << endl;
+			cerr << "error: " << r.errmsg << endl;
 			return 1;
 		}
 		
