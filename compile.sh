@@ -40,7 +40,7 @@ function srclink() {
 	local b="$1"
 	checkdeps "$b" $OBJS && echo "uptodate: $b" && return 0
 	echo "linking $b"
-	g++ $OBJS -o "$b" || exit -1
+	g++ $OBJS -o "$b" $2 || exit -1
 }
 
 # compile all sources
@@ -50,4 +50,4 @@ for f in *.cpp; do
 	OBJS="$OBJS $(pwd)/${f/.cpp/.o}"
 done
 
-srclink "test-png.bin"
+srclink "test-png.bin" "-lz"
