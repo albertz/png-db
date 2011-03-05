@@ -52,66 +52,71 @@ PngReader::PngReader(FILE* f) {
 	stream.opaque = Z_NULL;
 	stream.avail_in = 0;
 	stream.next_in = Z_NULL;
-	gotStreamEnd = gotEndChunk = false;
+	hasInitialized = gotStreamEnd = gotEndChunk = hasFinishedReading = false;
 }
 
 Return __PngReader_init(PngReader& png) {
 	if(inflateInit(&png.stream) != Z_OK)
 		return "failed to init inflate stream";
-	return png_read_sig(png.file);
+	ASSERT( png_read_sig(png.file) );
+	png.hasInitialized = true;
+	return true;
 }
 
 Return __PngReader_read(PngReader& png) {
-	while(true) {
-		if(png.gotEndChunk) {
-			if(png.gotStreamEnd) return true;
-			return "zlib data stream incomplete";
-		}
-		if(feof(png.file)) return "end-of-file";
-		if(ferror(png.file)) return "file-read-error";
-		
-		PngChunk chunk;
-		ASSERT( png_read_chunk(png.file, chunk) );
-		bool hadEarlierDataChunk = png.dataStream.size() > 0;
-		
-		if(chunk.type == "IEND")
-			png.gotEndChunk = true;
-		else if(chunk.type == "IDAT") {
-			if(png.gotStreamEnd) return "got another IDAT chunk but zlib stream was already finished";
-			png.stream.avail_in = chunk.data.size();
-			png.stream.next_in = (unsigned char*) &chunk.data[0];
-			while(true) {
-				char outputData[1024*128];
-				png.stream.avail_out = sizeof(outputData);
-				png.stream.next_out = (unsigned char*) outputData;
-				int ret = inflate(&png.stream, Z_NO_FLUSH);
-				switch(ret) {
-					case Z_STREAM_ERROR: return "zlib stream error / invalid compression level";
-					case Z_NEED_DICT: return "zlib need dict error";
-					case Z_DATA_ERROR: return "zlib data error";
-					case Z_MEM_ERROR: return "zlib out-of-memory error";
-					case Z_STREAM_END: png.gotStreamEnd = true;
-				}
-				size_t out_size = sizeof(outputData) - png.stream.avail_out;
-				if(out_size == 0) break;
-				cout << "at " << ftell(png.file) << ": got " << out_size << " uncompressed" << endl;
-				png.dataStream.push_back( std::string(outputData, out_size) );
+	if(png.gotEndChunk) {
+		if(png.gotStreamEnd) return true;
+		return "zlib data stream incomplete";
+	}
+	if(feof(png.file)) return "end-of-file";
+	if(ferror(png.file)) return "file-read-error";
+	
+	PngChunk chunk;
+	ASSERT( png_read_chunk(png.file, chunk) );
+	bool hadEarlierDataChunk = png.dataStream.size() > 0;
+	
+	if(chunk.type == "IEND")
+		png.gotEndChunk = true;
+	else if(chunk.type == "IDAT") {
+		if(png.gotStreamEnd) return "got another IDAT chunk but zlib stream was already finished";
+		png.stream.avail_in = chunk.data.size();
+		png.stream.next_in = (unsigned char*) &chunk.data[0];
+		while(true) {
+			char outputData[1024*128];
+			png.stream.avail_out = sizeof(outputData);
+			png.stream.next_out = (unsigned char*) outputData;
+			int ret = inflate(&png.stream, Z_NO_FLUSH);
+			switch(ret) {
+				case Z_STREAM_ERROR: return "zlib stream error / invalid compression level";
+				case Z_NEED_DICT: return "zlib need dict error";
+				case Z_DATA_ERROR: return "zlib data error";
+				case Z_MEM_ERROR: return "zlib out-of-memory error";
+				case Z_STREAM_END: png.gotStreamEnd = true;
 			}
-			chunk.data = ""; // reset because we don't want to keep this in the stored chunk list
+			size_t out_size = sizeof(outputData) - png.stream.avail_out;
+			if(out_size == 0) break;
+			png.dataStream.push_back( std::string(outputData, out_size) );
 		}
-		
-		// store the chunk. but only one single (empty) reference to IDAT.
-		if(!hadEarlierDataChunk || chunk.type != "IDAT")
-			png.chunks.push_back(chunk);
+		chunk.data = ""; // reset because we don't want to keep this in the stored chunk list
 	}
 	
-	return "WTF";
+	// store the chunk. but only one single (empty) reference to IDAT.
+	if(!hadEarlierDataChunk || chunk.type != "IDAT")
+		png.chunks.push_back(chunk);
+	
+	return true;
 }
 
 Return PngReader::read() {
-	ASSERT( __PngReader_init(*this) );
-	ASSERT( __PngReader_read(*this) );
+	if(hasFinishedReading) return true;
+	if(!hasInitialized) return __PngReader_init(*this);
+	if(!hasFinishedReading) {
+		ASSERT( __PngReader_read(*this) );
 	
-	(void)inflateEnd(&stream);
+		if(gotStreamEnd && gotEndChunk) {
+			(void)inflateEnd(&stream);
+			hasFinishedReading = true;
+		}
+	}
 	return true;
 }

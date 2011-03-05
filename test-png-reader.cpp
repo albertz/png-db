@@ -12,13 +12,19 @@ int main(int argc, char** argv) {
 	
 	FILE* f = fopen(argv[1], "r");
 	PngReader reader(f);
-	Return r = reader.read();
-	if(r)
-		cout << "success" << endl;
-	else {	
-		cout << "error: " << r.errmsg << endl;
-		return 1;
-	}
+	while(!reader.hasFinishedReading) {
+		Return r = reader.read();
+		if(!r) {
+			cout << "error: " << r.errmsg << endl;
+			return 1;
+		}
 		
+		size_t s = 0;
+		for(std::list<std::string>::iterator i = reader.dataStream.begin(); i != reader.dataStream.end(); ++i)
+			s += i->size();
+		cout << "at " << ftell(f) << ": got " << s << " uncompressed" << endl;		
+	}
+	
+	cout << "success" << endl;
 	return 0;
 }

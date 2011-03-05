@@ -24,7 +24,7 @@ Return png_read_chunk(FILE* f, PngChunk& chunk);
 struct PngReader {
 	FILE* file;
 	z_stream stream;
-	bool gotStreamEnd, gotEndChunk;
+	bool hasInitialized, gotStreamEnd, gotEndChunk, hasFinishedReading;
 	std::list<PngChunk> chunks;
 	std::list<std::string> dataStream;
 	
