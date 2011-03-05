@@ -52,10 +52,11 @@ PngReader::PngReader(FILE* f) {
 	stream.opaque = Z_NULL;
 	stream.avail_in = 0;
 	stream.next_in = Z_NULL;
-	hasInitialized = gotStreamEnd = gotEndChunk = hasFinishedReading = false;
+	memset(&header, sizeof(PngHeader), 0);
+	hasInitialized = gotHeader = gotStreamEnd = gotEndChunk = hasFinishedReading = false;
 }
 
-Return __PngReader_init(PngReader& png) {
+static Return __PngReader_init(PngReader& png) {
 	if(inflateInit(&png.stream) != Z_OK)
 		return "failed to init inflate stream";
 	ASSERT( png_read_sig(png.file) );
@@ -63,7 +64,38 @@ Return __PngReader_init(PngReader& png) {
 	return true;
 }
 
-Return __PngReader_read(PngReader& png) {
+static Return __PngReader_read_header(PngHeader& header, PngChunk& chunk) {
+	if(chunk.data.size() != PngHeader::SIZE)
+		return "IHDR size is invalid";
+	memcpy(&header, &chunk.data[0], PngHeader::SIZE);
+	BEndianSwap(header.width);
+	BEndianSwap(header.height);
+	return true;
+}
+
+static Return __PngReader_read_data(PngReader& png, PngChunk& chunk) {
+	png.stream.avail_in = chunk.data.size();
+	png.stream.next_in = (unsigned char*) &chunk.data[0];
+	while(true) {
+		char outputData[1024*128];
+		png.stream.avail_out = sizeof(outputData);
+		png.stream.next_out = (unsigned char*) outputData;
+		int ret = inflate(&png.stream, Z_NO_FLUSH);
+		switch(ret) {
+			case Z_STREAM_ERROR: return "zlib stream error / invalid compression level";
+			case Z_NEED_DICT: return "zlib need dict error";
+			case Z_DATA_ERROR: return "zlib data error";
+			case Z_MEM_ERROR: return "zlib out-of-memory error";
+			case Z_STREAM_END: png.gotStreamEnd = true;
+		}
+		size_t out_size = sizeof(outputData) - png.stream.avail_out;
+		if(out_size == 0) break;
+		png.dataStream.push_back( std::string(outputData, out_size) );
+	}
+	return true;
+}
+
+static Return __PngReader_read(PngReader& png) {
 	if(png.gotEndChunk) {
 		if(png.gotStreamEnd) return true;
 		return "zlib data stream incomplete";
@@ -75,30 +107,18 @@ Return __PngReader_read(PngReader& png) {
 	ASSERT( png_read_chunk(png.file, chunk) );
 	bool hadEarlierDataChunk = png.dataStream.size() > 0;
 	
-	if(chunk.type == "IEND")
-		png.gotEndChunk = true;
-	else if(chunk.type == "IDAT") {
+	if(chunk.type == "IDAT") {
+		if(!png.gotHeader) return "got data chunk but didn't got header";
 		if(png.gotStreamEnd) return "got another IDAT chunk but zlib stream was already finished";
-		png.stream.avail_in = chunk.data.size();
-		png.stream.next_in = (unsigned char*) &chunk.data[0];
-		while(true) {
-			char outputData[1024*128];
-			png.stream.avail_out = sizeof(outputData);
-			png.stream.next_out = (unsigned char*) outputData;
-			int ret = inflate(&png.stream, Z_NO_FLUSH);
-			switch(ret) {
-				case Z_STREAM_ERROR: return "zlib stream error / invalid compression level";
-				case Z_NEED_DICT: return "zlib need dict error";
-				case Z_DATA_ERROR: return "zlib data error";
-				case Z_MEM_ERROR: return "zlib out-of-memory error";
-				case Z_STREAM_END: png.gotStreamEnd = true;
-			}
-			size_t out_size = sizeof(outputData) - png.stream.avail_out;
-			if(out_size == 0) break;
-			png.dataStream.push_back( std::string(outputData, out_size) );
-		}
+		ASSERT( __PngReader_read_data(png, chunk) );
 		chunk.data = ""; // reset because we don't want to keep this in the stored chunk list
 	}
+	else if(chunk.type == "IHDR") {
+		ASSERT( __PngReader_read_header(png.header, chunk) );
+		png.gotHeader = true;
+	}
+	else if(chunk.type == "IEND")
+		png.gotEndChunk = true;
 	
 	// store the chunk. but only one single (empty) reference to IDAT.
 	if(!hadEarlierDataChunk || chunk.type != "IDAT")
