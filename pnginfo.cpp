@@ -45,6 +45,7 @@ int main(int argc, char** argv) {
 	for(std::list<std::string>::iterator i = reader.scanlines.begin(); i != reader.scanlines.end(); ++i)
 		s += i->size();
 	cout << "uncompressed data stream size: " << s << endl;		
+	cout << "number scanlines: " << reader.scanlines.size() << endl;
 	
 	cout << "success" << endl;
 	return 0;
