@@ -130,13 +130,12 @@ static Return __PngReader_read(PngReader& png) {
 Return PngReader::read() {
 	if(hasFinishedReading) return "cannot read more: finished already";
 	if(!hasInitialized) return __PngReader_init(*this);
-	if(!hasFinishedReading) {
-		ASSERT( __PngReader_read(*this) );
-	
-		if(gotStreamEnd && gotEndChunk) {
-			(void)inflateEnd(&stream);
-			hasFinishedReading = true;
-		}
+
+	ASSERT( __PngReader_read(*this) );
+	if(gotStreamEnd && gotEndChunk) {
+		(void)inflateEnd(&stream);
+		hasFinishedReading = true;
 	}
+	
 	return true;
 }
