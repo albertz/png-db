@@ -52,7 +52,7 @@ function srclink() {
 	g++ $OBJS $o -o $b $2 || exit -1
 }
 
-BINS=("test-png-dumpchunks.cpp")
+BINS=("test-png-dumpchunks.cpp" "test-png-reader.cpp")
 
 # compile all sources
 OBJS=()
