@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/zsh
 
 # simple compile.sh script
 # by Albert Zeyer, 2010 or so
@@ -14,9 +14,9 @@ BUILDDIR="build"
 function checkdeps() {
 	local t="$1"
 	[ ! -e "$t" ] && return -1
-	while shift; do
-		[ "$1" != "" ] && [ ! -e "$1" ] && return -1
-		[ "$1" != "" ] && [ "$1" -nt "$t" ] && return -1
+	for arg in $*; do
+		[ "$arg" != "" ] && [ ! -e "$arg" ] && return -1
+		[ "$arg" != "" ] && [ "$arg" -nt "$t" ] && return -1
 	done
 	return 0
 }
@@ -36,25 +36,27 @@ function srccompile() {
 	local o="$BUILDDIR/${f/.cpp/.o}"
 	local deps="$BUILDDIR/$f.deps"
 	mkdir -p "$(dirname "$o")"
-	[ -e "$deps" ] && checkdeps "$o" "$f" $(listdeps "$deps") && echo "uptodate: $o" && return 0
+	[ -e $deps ] && checkdeps $o $f $(listdeps $deps) && echo "uptodate: $o" && return 0
 	echo "compiling $o"
-	g++ -c -MMD -MF "$deps" -o "$o" -iquote "$INCLUDE" -g "$f" || exit -1
+	g++ -c -MMD -MF $deps -o $o -iquote $INCLUDE -g $f || exit -1
 }
 
 # $1 - bin-file
 # will link all the $OBJS together
 function srclink() {
 	local b="$1"
-	checkdeps "$b" $OBJS && echo "uptodate: $b" && return 0
+	checkdeps $b $OBJS && echo "uptodate: $b" && return 0
 	echo "linking $b"
 	g++ $OBJS -o "$b" $2 || exit -1
 }
 
+BINS="test-png.cpp"
+
 # compile all sources
-OBJS=""
+OBJS=()
 for f in *.cpp; do
 	srccompile "$f"
-	OBJS="$OBJS $BUILDDIR/${f/.cpp/.o}"
+	OBJS=($OBJS "$BUILDDIR/${f/.cpp/.o}")
 done
 
 mkdir -p bin
