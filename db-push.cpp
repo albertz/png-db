@@ -8,6 +8,8 @@
 #include "DbPng.h"
 #include "StringUtils.h"
 
+#include <ctime>
+#include <cstdlib>
 #include <cstdio>
 #include <iostream>
 using namespace std;
@@ -24,7 +26,8 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 	
-	Db db;
+	srandom(time(NULL));
+	Db db("db");
 	DbPngEntryWriter dbPngWriter(f, &db);
 	while(dbPngWriter) {
 		Return r = dbPngWriter.next();		

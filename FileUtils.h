@@ -55,6 +55,7 @@ static Return fread_bigendian(FILE* stream, _D& d) {
 }
 
 Return fread_all(FILE* fp, std::string& out);
+Return fwrite_all(FILE* fp, const std::string& in);
 
 struct DirIter : DontCopyTag {
 	DIR* dir;
@@ -66,5 +67,6 @@ struct DirIter : DontCopyTag {
 	operator bool() const { return dir != NULL && !filename.empty(); }
 };
 
+Return createRecDir(const std::string& abs_filename, bool last_is_dir = true);
 
 #endif

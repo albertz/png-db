@@ -4,6 +4,9 @@
  */
 
 #include "FileUtils.h"
+#include <sys/stat.h> // mkdir
+#include <errno.h>
+#include <cstdio>
 
 Return fread_all(FILE* fp, std::string& out) {
 	fseek(fp, 0, SEEK_END);
@@ -19,9 +22,24 @@ Return fread_all(FILE* fp, std::string& out) {
 			return "end-of-file";
 		if(ferror(fp))
 			return "file-read-error";
-		size_t n = fread(outP, 1, remaining, fp);
+		size_t n = fread(outP, remaining, 1, fp);
 		remaining -= n;
 		outP += n;
+	}
+	
+	return true;
+}
+
+Return fwrite_all(FILE* fp, const std::string& in) {
+	const char* inP = &in[0];
+	size_t remaining = in.size();
+	
+	while(remaining > 0) {
+		if(ferror(fp))
+			return "file-write-error";
+		size_t n = fwrite(inP, remaining, 1, fp);
+		remaining -= n;
+		inP += n;
 	}
 	
 	return true;
@@ -40,4 +58,25 @@ void DirIter::next() {
 	dirent* entry = readdir(dir);
 	if(entry == NULL) return;
 	filename = std::string(entry->d_name, entry->d_namlen);
+}
+
+static Return __createDir(const std::string& dir, mode_t mode = 0777) {
+	if(mkdir(dir.c_str(), mode) != 0) {
+		if(errno == EEXIST) return true; // no error
+		return std::string() + "cannot create dir '" + dir + "': " + strerror(errno);
+	}
+	return true;
+}
+
+Return createRecDir(const std::string& abs_filename, bool last_is_dir) {
+	std::string tmp;
+	std::string::const_iterator f = abs_filename.begin();
+	for(tmp = ""; f != abs_filename.end(); f++) {
+		if(*f == '\\' || *f == '/')
+			ASSERT( __createDir(tmp) );
+		tmp += *f;
+	}
+	if(last_is_dir)
+		ASSERT( __createDir(tmp) );
+	return true;
 }
