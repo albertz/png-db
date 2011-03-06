@@ -8,9 +8,13 @@
 
 #include "Return.h"
 #include "Endianess.h"
+#include "Utils.h"
 
 #include <cstdio>
 #include <cstring>
+#include <dirent.h>
+#include <string>
+#include <list>
 
 static inline Return fread_bytes(FILE* f, char* d, size_t s) {
 	if(fread(d, s, 1, f) > 0) return true;
@@ -49,6 +53,16 @@ static Return fread_bigendian(FILE* stream, _D& d) {
 	d = (_D)data;
 	return true;
 }
+
+struct DirIter : DontCopyTag {
+	DIR* dir;
+	std::string filename;
+	
+	DirIter(const std::string& dirname) : dir(opendir(dirname.c_str())) {}
+	~DirIter();
+	DirIter& operator++();
+	operator bool() const { return dir != NULL && !filename.empty(); }
+};
 
 
 #endif
