@@ -42,13 +42,19 @@ void DbEntry::compress() {
 			case Z_OK: break;
 			case Z_STREAM_END: break;
 			// these cases should not happen. but check anyway
-			case Z_STREAM_ERROR: assert(false); return;
-			default: assert(false); return;
+			case Z_STREAM_ERROR:
+			default:
+				cerr << "error to deflate " << data.size() << " bytes" << endl;
+				cerr << "remaining: " << stream.avail_in << " bytes" << endl;
+				cerr << "deflate ret: " << ret << endl;
+				assert(false);
+				return;
 		}
 		size_t out_size = sizeof(outputData) - stream.avail_out;
-		if(out_size == 0) break;
 		compressed += std::string(outputData, out_size);
+		if(stream.avail_in == 0) break;
 	}
+	deflateEnd(&stream);
 }
 
 Return DbEntry::uncompress() {
@@ -69,16 +75,17 @@ Return DbEntry::uncompress() {
 		stream.next_out = (unsigned char*) outputData;
 		int ret = inflate(&stream, Z_NO_FLUSH);
 		switch(ret) {
-			case Z_STREAM_ERROR: return "zlib stream error / invalid compression level";
-			case Z_NEED_DICT: return "zlib need dict error";
-			case Z_DATA_ERROR: return "zlib data error";
-			case Z_MEM_ERROR: return "zlib out-of-memory error";
+			case Z_STREAM_ERROR: inflateEnd(&stream); return "zlib stream error / invalid compression level";
+			case Z_NEED_DICT: inflateEnd(&stream); return "zlib need dict error";
+			case Z_DATA_ERROR: inflateEnd(&stream); return "zlib data error";
+			case Z_MEM_ERROR: inflateEnd(&stream); return "zlib out-of-memory error";
 			case Z_STREAM_END: gotStreamEnd = true;
 		}
 		size_t out_size = sizeof(outputData) - stream.avail_out;
 		if(out_size == 0) break;
 		data += std::string(outputData, out_size);
-	}
+	}	
+	inflateEnd(&stream);
 	
 	if(!gotStreamEnd)
 		return "zlib stream incomplete";

@@ -72,6 +72,7 @@ struct PngReader {
 	std::list<std::string> scanlines;
 	
 	PngReader(FILE* f = NULL);
+	~PngReader();
 	Return read();
 };
 

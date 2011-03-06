@@ -208,3 +208,8 @@ Return PngReader::read() {
 	
 	return true;
 }
+
+PngReader::~PngReader() {
+	inflateEnd(&stream);
+}
+
