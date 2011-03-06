@@ -10,13 +10,15 @@
 #include "Db.h"
 #include <cstdio>
 
-struct DbPngEntryIter {
+struct DbPngEntryWriter {
 	PngReader reader;
-	DbEntry entry;
+	Db* db;
+	std::list<DbEntryId> contentEntries;
+	DbEntryId contentId;
 	
-	DbPngEntryIter(FILE* f) : reader(f) { next(); /* set first entry */ }
+	DbPngEntryWriter(FILE* f, Db* _db) : reader(f), db(_db) {}
 	Return next();
-	operator bool() const { return !entry.data.empty(); }
+	operator bool() const { return reader.hasInitialized && !reader.hasFinishedReading; }
 };
 
 #endif
