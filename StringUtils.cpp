@@ -8,7 +8,7 @@
 
 std::string hexString(char c) {
 	char buf[3];
-	sprintf(buf, "%02X", c);
+	sprintf(buf, "%02X", (int)(unsigned char)c);
 	return buf;
 }
 
