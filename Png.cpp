@@ -175,7 +175,6 @@ static Return __PngReader_read(PngReader& png) {
 	
 	PngChunk chunk;
 	ASSERT( png_read_chunk(png.file, chunk) );
-	bool hadEarlierDataChunk = png.scanlines.size() > 0;
 	
 	if(chunk.type == "IDAT") {
 		if(!png.gotHeader) return "got data chunk but didn't got header";
@@ -189,9 +188,9 @@ static Return __PngReader_read(PngReader& png) {
 	}
 	else if(chunk.type == "IEND")
 		png.gotEndChunk = true;
-	
-	// store the chunk. but only one single (empty) reference to IDAT.
-	if(!hadEarlierDataChunk || chunk.type != "IDAT")
+
+	// only keep chunks with information that we don't keep otherwise somewhere else
+	if(chunk.type != "IDAT" && chunk.type != "IEND")
 		png.chunks.push_back(chunk);
 	
 	return true;
