@@ -33,7 +33,7 @@ Return DbPngEntryWriter::next() {
 		}
 		
 		if(entry.data.size() > 0) {
-			entry.calcSha1();
+			entry.prepare();
 			DbEntryId id;
 			ASSERT( db->push(id, entry) );
 			if(isFinal) {

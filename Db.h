@@ -16,11 +16,16 @@
 struct DbEntry {
 	std::string data;
 	std::string sha1;
+	std::string compressed;
 	
 	DbEntry() {}
 	DbEntry(const std::string& d) : data(d) { calcSha1(); }
 	bool haveSha1() const { return !sha1.empty(); }
 	void calcSha1();
+	bool haveCompressed() const { return !compressed.empty(); }
+	void compress();
+	void uncompress();
+	void prepare() { calcSha1(); compress(); }
 };
 
 typedef std::string DbEntryId; /* guaranteed to not contain \0 and to be not empty */
