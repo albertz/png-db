@@ -8,9 +8,15 @@
 
 #include <string>
 #include <list>
+#include "Endianess.h"
 
 std::string hexString(char c);
 std::string hexString(const std::string& rawData);
 
+template<typename T>
+std::string rawString(T val) {
+	BEndianSwap(val);
+	return std::string((char*)&val, sizeof(T));
+}
 
 #endif

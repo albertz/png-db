@@ -12,7 +12,7 @@
 
 #define DbEntryType_PngContentList 1
 #define DbEntryType_PngChunk 2
-#define DbEntryType_PngScanline 3
+#define DbEntryType_PngBlock 3
 
 struct DbEntry {
 	std::string data;
