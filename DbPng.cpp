@@ -5,6 +5,12 @@
 
 #include "Db.h"
 #include "DbPng.h"
+#include "StringUtils.h"
+#include "Sha1.h"
+
+#include <sys/mman.h>
+#include <iostream>
+using namespace std;
 
 Return DbPngEntryWriter::next() {
 	ASSERT( reader.read() );

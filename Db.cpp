@@ -7,6 +7,8 @@
 #define Z_CompressionLevel 9
 #endif
 
+#define Z_BufSize 1024*128
+
 #include "Db.h"
 #include "Sha1.h"
 #include "StringUtils.h"
@@ -34,10 +36,10 @@ void DbEntry::compress() {
 	stream.avail_in = data.size();
 	stream.next_in = (unsigned char*) &data[0];
 	while(true) {
-		char outputData[1024*128];
+		char outputData[Z_BufSize];
 		stream.avail_out = sizeof(outputData);
 		stream.next_out = (unsigned char*) outputData;
-		int ret = deflate(&stream, Z_NO_FLUSH);
+		int ret = deflate(&stream, Z_FINISH);
 		switch(ret) {
 			case Z_OK: break;
 			case Z_STREAM_END: break;
@@ -52,7 +54,7 @@ void DbEntry::compress() {
 		}
 		size_t out_size = sizeof(outputData) - stream.avail_out;
 		compressed += std::string(outputData, out_size);
-		if(stream.avail_in == 0) break;
+		if(ret == Z_STREAM_END) break;
 	}
 	deflateEnd(&stream);
 }
@@ -70,7 +72,7 @@ Return DbEntry::uncompress() {
 	stream.avail_in = compressed.size();
 	stream.next_in = (unsigned char*) &compressed[0];
 	while(true) {
-		char outputData[1024*128];
+		char outputData[Z_BufSize];
 		stream.avail_out = sizeof(outputData);
 		stream.next_out = (unsigned char*) outputData;
 		int ret = inflate(&stream, Z_NO_FLUSH);
@@ -95,7 +97,7 @@ Return DbEntry::uncompress() {
 std::string filenameForDbEntryId(const DbEntryId& id) {
 	assert(!id.empty());
 	
-	std::string ret;
+	std::string ret = "data/";
 	for(size_t i = 0; i < id.size() - 1; ++i)
 		ret += hexString(id[i]) + "/";
 	ret += hexString(id[id.size()-1]) + ".dat";
@@ -105,7 +107,7 @@ std::string filenameForDbEntryId(const DbEntryId& id) {
 std::string dirnameForSha1Ref(const std::string& sha1) {
 	assert(sha1.size() == SHA1_DIGEST_SIZE);
 
-	std::string ret;
+	std::string ret = "sha1refs/";
 	for(size_t i = 0; i < sha1.size(); ++i) {
 		if(i % 5 == 0 && i > 0) ret += "/";
 		ret += hexString(sha1[i]);
@@ -124,32 +126,34 @@ static DbEntryId __entryIdFromSha1RefFilename(const std::string& fn) {
 	DbEntryId id;
 	size_t i = 0;
 	for(; i + 1 < fn.size(); i += 2) {
+		if(fn.substr(i) == ".ref") return id;
 		int n1 = __hexnumFromChar(fn[i]);
 		int n2 = __hexnumFromChar(fn[i+1]);
 		if(n1 < 0 || n2 < 0) return "";
 		id += (char)(unsigned char)(n1 * 16 + n2);
 	}
-	if(i >= fn.size()) return "";
-	if(fn.substr(i) != ".ref") return "";
-	return id;
+	return "";
 }
 
 static Return __openNewDbEntry(const std::string& baseDir, DbEntryId& id, FILE*& f) {
 	bool createdDir = false;
 	unsigned short triesNum = (id.size() <= 4) ? (2 << id.size()) : 64;
 	for(unsigned short i = 0; i < triesNum; ++i) {
-		char c = random();
-		std::string filename = baseDir + "/" + filenameForDbEntryId(id + c);
+		DbEntryId newId = id;
+		newId += (char)random();
+		std::string filename = baseDir + "/" + filenameForDbEntryId(newId);
 		if(!createdDir) {
 			ASSERT( createRecDir(filename, false) );
 			createdDir = true;
 		}
 		f = fopen(filename.c_str(), "wbx");
-		if(f) return true;
+		if(f) {
+			id = newId;
+			return true;
+		}
 	}
 
-	char c = random();
-	id += c;
+	id += (char)random();
 	return __openNewDbEntry(baseDir, id, f);
 }
 
@@ -163,13 +167,14 @@ Return Db::push(/*out*/ DbEntryId& id, const DbEntry& entry) {
 	std::string sha1refdir = dirnameForSha1Ref(entry.sha1);
 	for(DirIter dir(baseDir + "/" + sha1refdir); dir; dir.next()) {
 		DbEntryId otherId = __entryIdFromSha1RefFilename(dir.filename);
-		cout << "direntry: " << dir.filename << ", entry=" << otherId << endl;
 		if(otherId != "") {
 			DbEntry otherEntry;
 			if(get(otherEntry, otherId)) {
+				cout << "entry=" << hexString(otherId) << "->" << hexString(otherEntry.sha1) << " // " << hexString(entry.sha1) << endl;
 				if(entry == otherEntry) {
 					// found
 					id = otherId;
+					cout << "found entry for " << hexString(entry.sha1) << ": " + hexString(id) << endl;
 					return true;
 				}
 			}
@@ -180,6 +185,7 @@ Return Db::push(/*out*/ DbEntryId& id, const DbEntry& entry) {
 	id = "";
 	FILE* f = NULL;
 	ASSERT( __openNewDbEntry(baseDir, id, f) );
+	cout << "new entry for " << hexString(entry.sha1) << ": " + hexString(id) << endl;
 	{
 		Return r = fwrite_all(f, entry.compressed);
 		fclose(f);
@@ -187,7 +193,8 @@ Return Db::push(/*out*/ DbEntryId& id, const DbEntry& entry) {
 	}
 	
 	// create sha1 ref
-	std::string sha1reffn = sha1refdir + "/" + hexString(id) + ".ref";
+	std::string sha1reffn = baseDir + "/" + sha1refdir + "/" + hexString(id) + ".ref";
+	ASSERT( createRecDir(sha1reffn, false) );
 	f = fopen(sha1reffn.c_str(), "w");
 	if(f == NULL)
 		return "DB push: cannot create SHA1 ref: cannot create file '" + sha1reffn + "'";
@@ -210,5 +217,24 @@ Return Db::get(/*out*/ DbEntry& entry, const DbEntryId& id) {
 
 	ASSERT( entry.uncompress() );
 	entry.calcSha1();
+	
+	std::string oldSha1 = entry.sha1;
+	std::string olddata = entry.data;
+	std::string oldcompr = entry.compressed;
+	size_t oldlen = entry.data.size();
+	size_t oldcompresslen = entry.compressed.size();
+	entry.compress();
+	ASSERT( entry.uncompress() );
+	entry.calcSha1();
+	if( entry.sha1 != oldSha1 ) {
+		cerr << "sha1 missmatch: " << hexString(oldSha1) << " // " << hexString(entry.sha1) << endl;
+		cerr << "len1=" << oldlen << " ; len2=" << entry.data.size() << endl;
+		cerr << "clen1=" << oldcompresslen << " ; clen2=" << entry.compressed.size() << endl;
+		cerr << "data equal: " << (int)(olddata == entry.data) << endl;
+		cerr << "compr equal: " << (int)(oldcompr == entry.compressed) << endl;
+		cerr << "id: " << hexString(id) << endl;
+		assert(false);
+	}
+	
 	return true;
 }

@@ -20,7 +20,7 @@ struct DbEntry {
 	std::string compressed;
 	
 	DbEntry() {}
-	DbEntry(const std::string& d) : data(d) { calcSha1(); }
+	DbEntry(const std::string& d) : data(d) { prepare(); }
 	bool haveSha1() const { return !sha1.empty(); }
 	void calcSha1();
 	bool haveCompressed() const { return !compressed.empty(); }
