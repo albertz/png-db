@@ -50,7 +50,7 @@ void DbEntry::compress() {
 	}
 }
 
-void DbEntry::uncompress() {
+Return DbEntry::uncompress() {
 	data = "";
 	
 	z_stream stream;
@@ -59,24 +59,29 @@ void DbEntry::uncompress() {
 	stream.opaque = Z_NULL;
 	inflateInit(&stream);
 	
-	stream.avail_in = data.size();
-	stream.next_in = (unsigned char*) &data[0];
+	bool gotStreamEnd = false;
+	stream.avail_in = compressed.size();
+	stream.next_in = (unsigned char*) &compressed[0];
 	while(true) {
 		char outputData[1024*128];
 		stream.avail_out = sizeof(outputData);
 		stream.next_out = (unsigned char*) outputData;
 		int ret = inflate(&stream, Z_NO_FLUSH);
 		switch(ret) {
-			case Z_OK: break;
-			case Z_STREAM_END: break;
-				// these cases should not happen. but check anyway
-			case Z_STREAM_ERROR: assert(false); return;
-			default: assert(false); return;
+			case Z_STREAM_ERROR: return "zlib stream error / invalid compression level";
+			case Z_NEED_DICT: return "zlib need dict error";
+			case Z_DATA_ERROR: return "zlib data error";
+			case Z_MEM_ERROR: return "zlib out-of-memory error";
+			case Z_STREAM_END: gotStreamEnd = true;
 		}
 		size_t out_size = sizeof(outputData) - stream.avail_out;
 		if(out_size == 0) break;
 		data += std::string(outputData, out_size);
 	}
+	
+	if(!gotStreamEnd)
+		return "zlib stream incomplete";
+	return true;
 }
 
 std::string filenameForDbEntryId(const DbEntryId& id) {
@@ -119,6 +124,17 @@ Return Db::push(/*out*/ DbEntryId& id, const DbEntry& entry) {
 }
 
 Return Db::get(/*out*/ DbEntry& entry, const DbEntryId& id) {
-	
+	std::string filename = baseDir + "/" + filenameForDbEntryId(id);
+	FILE* f = fopen(filename.c_str(), "rb");
+	if(f == NULL)
+		return "Db::get: cannot open file '" + filename + "'";	
+	{
+		Return r = fread_all(f, entry.compressed);
+		fclose(f);
+		if(!r) return r;
+	}
+
+	ASSERT( entry.uncompress() );
+	entry.calcSha1();
 	return true;
 }

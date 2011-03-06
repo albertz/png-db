@@ -18,7 +18,7 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 	
-	FILE* f = fopen(argv[1], "r");
+	FILE* f = fopen(argv[1], "rb");
 	if(f == NULL) {
 		cerr << "error: cannot open " << argv[1] << endl;
 		return 1;

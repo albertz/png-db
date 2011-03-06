@@ -24,7 +24,7 @@ struct DbEntry {
 	void calcSha1();
 	bool haveCompressed() const { return !compressed.empty(); }
 	void compress();
-	void uncompress();
+	Return uncompress();
 	void prepare() { calcSha1(); compress(); }
 };
 

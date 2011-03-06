@@ -54,6 +54,8 @@ static Return fread_bigendian(FILE* stream, _D& d) {
 	return true;
 }
 
+Return fread_all(FILE* fp, std::string& out);
+
 struct DirIter : DontCopyTag {
 	DIR* dir;
 	std::string filename;

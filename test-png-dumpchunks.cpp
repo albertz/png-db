@@ -15,7 +15,7 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 	
-	FILE* f = fopen(argv[1], "r");
+	FILE* f = fopen(argv[1], "rb");
 	if(Return r = png_read_sig(f))
 		cout << "* signature: OK" << endl;
 	else {	
