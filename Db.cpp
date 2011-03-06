@@ -50,6 +50,35 @@ void DbEntry::compress() {
 	}
 }
 
+void DbEntry::uncompress() {
+	data = "";
+	
+	z_stream stream;
+	stream.zalloc = Z_NULL;
+	stream.zfree = Z_NULL;
+	stream.opaque = Z_NULL;
+	inflateInit(&stream);
+	
+	stream.avail_in = data.size();
+	stream.next_in = (unsigned char*) &data[0];
+	while(true) {
+		char outputData[1024*128];
+		stream.avail_out = sizeof(outputData);
+		stream.next_out = (unsigned char*) outputData;
+		int ret = inflate(&stream, Z_NO_FLUSH);
+		switch(ret) {
+			case Z_OK: break;
+			case Z_STREAM_END: break;
+				// these cases should not happen. but check anyway
+			case Z_STREAM_ERROR: assert(false); return;
+			default: assert(false); return;
+		}
+		size_t out_size = sizeof(outputData) - stream.avail_out;
+		if(out_size == 0) break;
+		data += std::string(outputData, out_size);
+	}
+}
+
 std::string filenameForDbEntryId(const DbEntryId& id) {
 	assert(!id.empty());
 	
