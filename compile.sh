@@ -49,7 +49,7 @@ function srclink() {
 	local b="bin/${cpp/.cpp/}"
 	checkdeps $b $OBJS $o && echo "uptodate: $b" && return 0
 	echo "linking $b"
-	g++ $OBJS $o -o $b $2 || exit -1
+	g++ $OBJS $o -o $b ${(z)2} || exit -1
 }
 
 BINS=("test-png-dumpchunks.cpp" "test-png-reader.cpp" "pnginfo.cpp" "db-push.cpp")
