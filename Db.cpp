@@ -46,7 +46,7 @@ Return Db::push(/*out*/ DbEntryId& id, const DbEntry& entry) {
 		return "DB push: entry SHA1 not calculated";
 	
 	std::string sha1refdir = dirnameForSha1Ref(entry.sha1);
-	for(DirIter dir(baseDir + "/" + sha1refdir); dir; ++dir) {
+	for(DirIter dir(baseDir + "/" + sha1refdir); dir; dir.next()) {
 		cout << "direntry: " << dir.filename << endl;
 	}
 	

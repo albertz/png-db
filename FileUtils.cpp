@@ -12,11 +12,10 @@ DirIter::~DirIter() {
 	}
 }
 
-DirIter& DirIter::operator++() {
+void DirIter::next() {
 	filename = "";
-	if(dir == NULL) return *this;
+	if(dir == NULL) return;
 	dirent* entry = readdir(dir);
-	if(entry == NULL) return *this;
+	if(entry == NULL) return;
 	filename = std::string(entry->d_name, entry->d_namlen);
-	return *this;
 }

@@ -58,9 +58,9 @@ struct DirIter : DontCopyTag {
 	DIR* dir;
 	std::string filename;
 	
-	DirIter(const std::string& dirname) : dir(opendir(dirname.c_str())) {}
+	DirIter(const std::string& dirname) : dir(opendir(dirname.c_str())) { next(); /* set first filename */ }
 	~DirIter();
-	DirIter& operator++();
+	void next();
 	operator bool() const { return dir != NULL && !filename.empty(); }
 };
 
