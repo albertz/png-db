@@ -37,9 +37,11 @@ int main(int argc, char** argv) {
 		}
 	}
 	
-	cout << "num content entries: " << dbPngWriter.contentEntries.size() << endl;		
 	cout << "content id: " << hexString(dbPngWriter.contentId) << endl;
-
+	cout << "num content entries: " << dbPngWriter.contentEntries.size() << endl;		
+	cout << "db stats: push new: " << db.stats.pushNew << endl;
+	cout << "db stats: push reuse: " << db.stats.pushReuse << endl;
+	
 	cout << "success" << endl;
 	return 0;
 }

@@ -170,11 +170,10 @@ Return Db::push(/*out*/ DbEntryId& id, const DbEntry& entry) {
 		if(otherId != "") {
 			DbEntry otherEntry;
 			if(get(otherEntry, otherId)) {
-				cout << "entry=" << hexString(otherId) << "->" << hexString(otherEntry.sha1) << " // " << hexString(entry.sha1) << endl;
 				if(entry == otherEntry) {
 					// found
 					id = otherId;
-					cout << "found entry for " << hexString(entry.sha1) << ": " + hexString(id) << endl;
+					stats.pushReuse++;
 					return true;
 				}
 			}
@@ -185,7 +184,6 @@ Return Db::push(/*out*/ DbEntryId& id, const DbEntry& entry) {
 	id = "";
 	FILE* f = NULL;
 	ASSERT( __openNewDbEntry(baseDir, id, f) );
-	cout << "new entry for " << hexString(entry.sha1) << ": " + hexString(id) << endl;
 	{
 		Return r = fwrite_all(f, entry.compressed);
 		fclose(f);
@@ -200,6 +198,7 @@ Return Db::push(/*out*/ DbEntryId& id, const DbEntry& entry) {
 		return "DB push: cannot create SHA1 ref: cannot create file '" + sha1reffn + "'";
 	fclose(f);
 	
+	stats.pushNew++;
 	return true;
 }
 

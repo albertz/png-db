@@ -42,8 +42,15 @@ typedef std::string DbEntryId; /* guaranteed to not contain \0 and to be not emp
 std::string filenameForDbEntryId(const DbEntryId& id);
 std::string dirnameForSha1Ref(const std::string& sha1); // asserts that sha1.size() == SHA1_DIGEST_SIZE
 
+struct DbStats {
+	size_t pushNew;
+	size_t pushReuse;
+	DbStats() : pushNew(0), pushReuse(0) {}
+};
+
 struct Db {
 	std::string baseDir;
+	DbStats stats;
 	
 	Db(const std::string& d = ".") : baseDir(d) {}
 	Return push(/*out*/ DbEntryId& id, const DbEntry& entry);
