@@ -5,6 +5,8 @@
 
 #include "Png.h"
 #include "Db.h"
+#include "DbPng.h"
+#include "StringUtils.h"
 
 #include <cstdio>
 #include <iostream>
@@ -21,33 +23,20 @@ int main(int argc, char** argv) {
 		cerr << "error: cannot open " << argv[1] << endl;
 		return 1;
 	}
-	PngReader reader(f);
-	bool haveSeenHeader = false;
-	while(!reader.hasFinishedReading) {
-		Return r = reader.read();
+	
+	Db db;
+	DbPngEntryWriter dbPngWriter(f, &db);
+	while(dbPngWriter) {
+		Return r = dbPngWriter.next();		
 		if(!r) {
 			cerr << "error: " << r.errmsg << endl;
 			return 1;
 		}
-		
-		if(!haveSeenHeader && reader.gotHeader) {
-			cout << "header: width=" << reader.header.width << ", height=" << reader.header.height << endl;
-			cout << "header: bitDepth=" << (int)reader.header.bitDepth << endl;
-			cout << "header: colorType=" << (int)reader.header.colourType << endl;
-			cout << "header: bytesPerPixel=" << (int)reader.header.bytesPerPixel() << endl;
-			cout << "header: compressionMethod=" << (int)reader.header.compressionMethod << endl;
-			cout << "header: filterMethod=" << (int)reader.header.filterMethod << endl;
-			cout << "header: interlaceMethod=" << (int)reader.header.interlaceMethod << endl;
-			haveSeenHeader = true;
-		}
 	}
 	
-	size_t s = 0;
-	for(std::list<std::string>::iterator i = reader.scanlines.begin(); i != reader.scanlines.end(); ++i)
-		s += i->size();
-	cout << "uncompressed data stream size: " << s << endl;		
-	cout << "number scanlines: " << reader.scanlines.size() << endl;
-	
+	cout << "num content entries: " << dbPngWriter.contentEntries.size() << endl;		
+	cout << "content id: " << hexString(dbPngWriter.contentId) << endl;
+
 	cout << "success" << endl;
 	return 0;
 }

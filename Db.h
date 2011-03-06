@@ -32,6 +32,7 @@ std::string filenameForSha1Ref(const std::string& sha1, const DbEntryId& id);
 struct Db {
 	std::string baseDir;
 	
+	Db() : baseDir(".") {}
 	Return push(/*out*/ DbEntryId& id, const DbEntry& entry);
 	Return get(/*out*/ DbEntry& entry, const DbEntryId& id);
 };

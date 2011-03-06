@@ -18,7 +18,7 @@ struct DbPngEntryWriter {
 	
 	DbPngEntryWriter(FILE* f, Db* _db) : reader(f), db(_db) {}
 	Return next();
-	operator bool() const { return reader.hasInitialized && !reader.hasFinishedReading; }
+	operator bool() const { return !reader.hasFinishedReading; }
 };
 
 #endif

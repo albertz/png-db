@@ -21,6 +21,7 @@ Return DbPngEntryWriter::next() {
 		else if(reader.scanlines.size() > 0) {
 			entry.data += (char)DbEntryType_PngScanline;
 			entry.data += reader.scanlines.front();
+			reader.scanlines.pop_front();
 		}
 		else if(reader.hasFinishedReading) {
 			entry.data += (char)DbEntryType_PngContentList;
