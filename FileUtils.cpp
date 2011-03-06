@@ -8,6 +8,9 @@
 #include <errno.h>
 #include <cstdio>
 
+#include <iostream>
+using namespace std;
+
 Return fread_all(FILE* fp, std::string& out) {
 	fseek(fp, 0, SEEK_END);
 	size_t size = ftell(fp);
@@ -22,7 +25,7 @@ Return fread_all(FILE* fp, std::string& out) {
 			return "end-of-file";
 		if(ferror(fp))
 			return "file-read-error";
-		size_t n = fread(outP, remaining, 1, fp);
+		size_t n = fread(outP, 1, remaining, fp);
 		remaining -= n;
 		outP += n;
 	}
@@ -37,7 +40,7 @@ Return fwrite_all(FILE* fp, const std::string& in) {
 	while(remaining > 0) {
 		if(ferror(fp))
 			return "file-write-error";
-		size_t n = fwrite(inP, remaining, 1, fp);
+		size_t n = fwrite(inP, 1, remaining, fp);
 		remaining -= n;
 		inP += n;
 	}
