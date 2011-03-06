@@ -19,10 +19,10 @@ struct Sha1Context {
 	std::string final();
 };
 
+std::string calc_sha1(const char* data, size_t s);
+
 inline std::string calc_sha1(const std::string& data) {
-	Sha1Context c;
-	c.update(&data[0], data.size());
-	return c.final();
+	return calc_sha1(&data[0], data.size());
 }
 
 #endif /* __SHA1_H */

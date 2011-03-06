@@ -76,7 +76,7 @@ A million repetitions of "a"
   34AA973C D4C4DAA4 F61EEB2B DBAD2731 6534016F
 */
 
-/* #define SHA1HANDSOFF  */
+#define SHA1HANDSOFF
 
 #include <cstdio>
 #include <cstring>
@@ -257,4 +257,22 @@ std::string Sha1Context::final()
 #endif
 	
 	return std::string((char*)digest, SHA1_DIGEST_SIZE);
+}
+
+/*
+ // OpenSSL code
+ 
+#include <openssl/sha.h>
+
+std::string calc_sha1(const char* data, size_t size) {
+	std::string s(SHA_DIGEST_LENGTH, 0);
+	SHA1((const unsigned char*) data, size, (unsigned char*) &s[0]);
+	return s;
+}
+*/
+
+std::string calc_sha1(const char* data, size_t size) {
+	Sha1Context c;
+	c.update(data, size);
+	return c.final();
 }
