@@ -218,23 +218,5 @@ Return Db::get(/*out*/ DbEntry& entry, const DbEntryId& id) {
 	ASSERT( entry.uncompress() );
 	entry.calcSha1();
 	
-	std::string oldSha1 = entry.sha1;
-	std::string olddata = entry.data;
-	std::string oldcompr = entry.compressed;
-	size_t oldlen = entry.data.size();
-	size_t oldcompresslen = entry.compressed.size();
-	entry.compress();
-	ASSERT( entry.uncompress() );
-	entry.calcSha1();
-	if( entry.sha1 != oldSha1 ) {
-		cerr << "sha1 missmatch: " << hexString(oldSha1) << " // " << hexString(entry.sha1) << endl;
-		cerr << "len1=" << oldlen << " ; len2=" << entry.data.size() << endl;
-		cerr << "clen1=" << oldcompresslen << " ; clen2=" << entry.compressed.size() << endl;
-		cerr << "data equal: " << (int)(olddata == entry.data) << endl;
-		cerr << "compr equal: " << (int)(oldcompr == entry.compressed) << endl;
-		cerr << "id: " << hexString(id) << endl;
-		assert(false);
-	}
-	
 	return true;
 }
