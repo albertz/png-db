@@ -22,6 +22,18 @@ using namespace std;
 
 static DbIntf* db = NULL;
 
+#define DEBUG
+
+#ifdef DEBUG
+#define debugPrint(msg) { cerr << (std::string() + msg) << endl; }
+#else
+#define debugPrint(msg) {}
+#endif
+
+#define CHECK_RET(x, err_ret, err_msg) \
+	{ Return ___r = (x); if(!___r) { debugPrint(err_msg + ": " + ___r.errmsg); return err_ret; } }
+
+
 static int db_getattr(const char *path, struct stat *stbuf) {
     memset(stbuf, 0, sizeof(struct stat));
 	
@@ -36,8 +48,7 @@ static int db_getattr(const char *path, struct stat *stbuf) {
 		std::string dirname = dirName(filename);
 		
 		std::list<DbDirEntry> dirList;
-		if(!db->getDir(dirList, dirname))
-			return -ENOENT;
+		CHECK_RET(db->getDir(dirList, dirname), -ENOENT, "db_getattr: getDir failed");
 		
 		for(std::list<DbDirEntry>::iterator i = dirList.begin(); i != dirList.end(); ++i)
 			if(i->name == basename) {
@@ -48,9 +59,7 @@ static int db_getattr(const char *path, struct stat *stbuf) {
 			}
 	}
 	
-	if(stbuf->st_mode == 0)
-		return -ENOENT;
-	
+	CHECK_RET(stbuf->st_mode != 0, -ENOENT, "db_getattr: not found");
 	return 0;
 }
 
@@ -58,11 +67,9 @@ static int db_open(const char *path, struct fuse_file_info *fi) {
 	if(*path == '/') ++path; // skip '/' at the beginning
 
 	DbEntryId id;
-	if(!db->getFileRef(id, path))
-		return -ENOENT;
+	CHECK_RET(db->getFileRef(id, path), -ENOENT, "db_open: fileref not found");
 		
-    if ((fi->flags & O_ACCMODE) != O_RDONLY) /* Only reading allowed. */
-        return -EACCES;
+	CHECK_RET((fi->flags & O_ACCMODE) == O_RDONLY, -EACCES, "db_open: only reading allowed");
 	
     return 0;
 }
@@ -72,8 +79,7 @@ static int db_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	if(*path == '/') ++path; // skip '/' at the beginning
 
 	std::list<DbDirEntry> dirList;
-	if(!db->getDir(dirList, path))
-		return -ENOENT;
+	CHECK_RET(db->getDir(dirList, path), -ENOENT, "db_readdir: getDir failed");
 	
     filler(buf, ".", NULL, 0);           /* Current directory (.)  */
     filler(buf, "..", NULL, 0);          /* Parent directory (..)  */
@@ -116,8 +122,7 @@ static int db_read(const char *path, char *buf, size_t size, off_t offset,
 		return __return_content(buf, size, offset);
 	
 	DbEntryId fileEntryId;
-	if(!db->getFileRef(fileEntryId, filename))
-		return -ENOENT;
+	CHECK_RET(db->getFileRef(fileEntryId, filename), -ENOENT, "db_read: getFileRef failed");
 
 	// fileEntryId.empty() is allowed and means we have an empty file
 	if(fileEntryId.empty()) return 0;
@@ -132,8 +137,7 @@ static int db_read(const char *path, char *buf, size_t size, off_t offset,
 	} writer;
 	DbPngEntryReader dbPngReader(&writer, db, fileEntryId);
 	while(dbPngReader)
-		if(!dbPngReader.next())
-			return -EIO; // should not happen. thus return an IO error
+		CHECK_RET(dbPngReader.next(), -EIO, "db_read: reading failed");
 	
 	return __return_content(buf, size, offset);
 }
