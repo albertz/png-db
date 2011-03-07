@@ -5,27 +5,49 @@
 
 #include "DbRedisBackend.h"
 #include "StringUtils.h"
+#include "Utils.h"
 #include <cstdio>
 
-DbRedisBackend::DbRedisBackend(const std::string& _prefix, const std::string& host, int port, int timeout) {
+DbRedisBackend::DbRedisBackend(const std::string& _prefix, const std::string& ip, int port) {
 	prefix = _prefix;
-	redis = credis_connect(host.c_str(), port, timeout);
+	redis = redisConnect(ip.c_str(), port);
 }
 
 DbRedisBackend::~DbRedisBackend() {
 	if(redis != NULL) {
-		credis_close(redis);
+		redisFree(redis);
 		redis = NULL;
 	}
 }
 
-static Return __saveNewDbEntry(REDIS redis, const std::string& prefix, DbEntryId& id, const std::string& content) {
+struct RedisReplyWrapper : DontCopyTag {
+	redisReply* reply;
+	RedisReplyWrapper(void* r = NULL) : reply(NULL) { (*this) = r; }
+	~RedisReplyWrapper() { clear(); }
+	RedisReplyWrapper& operator=(void* r) { clear(); reply = (redisReply*)r; }
+	void clear() {
+		if(reply != NULL) {
+			freeReplyObject(reply);
+			reply = NULL;
+		}
+	}
+	operator Return() const {
+		if(reply == NULL) return "Redis: no reply";
+		if(reply->type == REDIS_REPLY_ERROR) return std::string() + "Redis: " + reply->str;
+		return true;
+	}
+};
+
+static Return __saveNewDbEntry(redisContext* redis, const std::string& prefix, DbEntryId& id, const std::string& content) {
 	unsigned short triesNum = (id.size() <= 4) ? (2 << id.size()) : 64;
 	for(unsigned short i = 0; i < triesNum; ++i) {
 		DbEntryId newId = id;
 		newId += (char)random();
 		std::string key = prefix + "data." + hexString(newId);
-		//credis_setnx(redis, key.c_str(), content);
+		RedisReplyWrapper reply( redisCommand(redis, "SETNX %s %b", key.c_str(), &content[0], content.size()) );
+		ASSERT( reply );
+		if(reply.reply->type == REDIS_REPLY_INTEGER && reply.reply->integer == 1)
+			return true;
 	}
 	
 	id += (char)random();
@@ -42,11 +64,11 @@ Return DbRedisBackend::push(/*out*/ DbEntryId& id, const DbEntry& entry) {
 	
 	// search for existing entry
 	std::string sha1refkey = prefix + "sha1ref." + hexString(entry.sha1);
-	char** sha1refs = NULL;
-	int sha1refCount = credis_smembers(redis, sha1refkey.c_str(), &sha1refs);
-	if(sha1refCount > 0) {
-		for(int i = 0; i < sha1refCount; ++i) {
-			DbEntryId otherId = sha1refs[i];
+	RedisReplyWrapper reply( redisCommand(redis, "SMEMBERS %s", sha1refkey.c_str()) );
+	ASSERT( reply );
+	if(reply.reply->type == REDIS_REPLY_ARRAY)
+		for(int i = 0; i < reply.reply->elements; ++i) {
+			DbEntryId otherId = std::string(reply.reply->element[i]->str, reply.reply->element[i]->len);
 			DbEntry otherEntry;
 			if(get(otherEntry, otherId)) {
 				if(entry == otherEntry) {
@@ -57,14 +79,14 @@ Return DbRedisBackend::push(/*out*/ DbEntryId& id, const DbEntry& entry) {
 				}
 			}
 		}
-	}
 	
 	// write DB entry
 	id = "";
 	ASSERT( __saveNewDbEntry(redis, prefix, id, entry.compressed) );
 	
 	// create sha1 ref
-	//credis_sadd(redis, sha1refkey.c_str(), id);
+	reply = redisCommand(redis, "SADD %s %b", sha1refkey.c_str(), &id[0], id.size());
+	ASSERT( reply );
 	
 	stats.pushNew++;
 	return true;
@@ -75,8 +97,14 @@ Return DbRedisBackend::get(/*out*/ DbEntry& entry, const DbEntryId& id) {
 		return "DB get: Redis connection not initialized";
 
 	std::string key = prefix + "data." + hexString(id);
-	//credis_get(redis, key.c_str(), &entry.compressed);
-
+	RedisReplyWrapper reply( redisCommand(redis, "GET %s", key.c_str()) );
+	ASSERT(reply);
+	if(reply.reply->type == REDIS_REPLY_NIL)
+		return "DB get: entry not found";
+	if(reply.reply->type != REDIS_REPLY_STRING)
+		return "DB get: Redis: invalid GET reply";
+	entry.compressed = std::string(reply.reply->str, reply.reply->len);
+	
 	ASSERT( entry.uncompress() );
 	entry.calcSha1();
 	
