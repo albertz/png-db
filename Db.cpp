@@ -94,7 +94,7 @@ Return DbEntry::uncompress() {
 	return true;
 }
 
-std::string filenameForDbEntryId(const DbEntryId& id) {
+static std::string __filenameForDbEntryId(const DbEntryId& id) {
 	assert(!id.empty());
 	
 	std::string ret = "data/";
@@ -104,7 +104,7 @@ std::string filenameForDbEntryId(const DbEntryId& id) {
 	return ret;
 }
 
-std::string dirnameForSha1Ref(const std::string& sha1) {
+static std::string __dirnameForSha1Ref(const std::string& sha1) {
 	assert(sha1.size() == SHA1_DIGEST_SIZE);
 
 	std::string ret = "sha1refs/";
@@ -141,7 +141,7 @@ static Return __openNewDbEntry(const std::string& baseDir, DbEntryId& id, FILE*&
 	for(unsigned short i = 0; i < triesNum; ++i) {
 		DbEntryId newId = id;
 		newId += (char)random();
-		std::string filename = baseDir + "/" + filenameForDbEntryId(newId);
+		std::string filename = baseDir + "/" + __filenameForDbEntryId(newId);
 		if(!createdDir) {
 			ASSERT( createRecDir(filename, false) );
 			createdDir = true;
@@ -164,7 +164,7 @@ Return Db::push(/*out*/ DbEntryId& id, const DbEntry& entry) {
 		return "DB push: entry compression not calculated";
 	
 	// search for existing entry
-	std::string sha1refdir = dirnameForSha1Ref(entry.sha1);
+	std::string sha1refdir = __dirnameForSha1Ref(entry.sha1);
 	for(DirIter dir(baseDir + "/" + sha1refdir); dir; dir.next()) {
 		DbEntryId otherId = __entryIdFromSha1RefFilename(dir.filename);
 		if(otherId != "") {
@@ -203,7 +203,7 @@ Return Db::push(/*out*/ DbEntryId& id, const DbEntry& entry) {
 }
 
 Return Db::get(/*out*/ DbEntry& entry, const DbEntryId& id) {
-	std::string filename = baseDir + "/" + filenameForDbEntryId(id);
+	std::string filename = baseDir + "/" + __filenameForDbEntryId(id);
 	FILE* f = fopen(filename.c_str(), "rb");
 	if(f == NULL)
 		return "Db::get: cannot open file '" + filename + "'";
