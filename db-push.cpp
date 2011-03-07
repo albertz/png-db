@@ -4,7 +4,7 @@
  */
 
 #include "Png.h"
-#include "DbFsBackend.h"
+#include "DbDefBackend.h"
 #include "DbPng.h"
 #include "StringUtils.h"
 
@@ -27,7 +27,7 @@ int main(int argc, char** argv) {
 	}
 	
 	srandom(time(NULL));
-	DbFsBackend db("db");
+	DbDefBackend db;
 	DbPngEntryWriter dbPngWriter(f, &db);
 	while(dbPngWriter) {
 		Return r = dbPngWriter.next();		
