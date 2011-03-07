@@ -6,7 +6,7 @@
 
 cd "$(dirname $0)"
 ROOTDIR="$(pwd)"
-INCLUDE="$ROOTDIR"
+CFLAGS="-I kyotocabinet"
 BUILDDIR="build"
 
 # $1 - target
@@ -44,7 +44,7 @@ function srccompile() {
 	mkdir -p "$(dirname "$o")"
 	[ -e $deps ] && checkdeps $o $f $(listdeps $deps) && echo "uptodate: $o" && return 0
 	echo "compiling $o"
-	$C[$fext] -c -MMD -MF $deps -o $o -iquote $INCLUDE -I $(dirname $f) -g $f || exit -1
+	$C[$fext] -c -MMD -MF $deps -o $o -iquote $(dirname $f) ${(z)CFLAGS} -g $f || exit -1
 }
 
 # $1 - c/cpp-file
