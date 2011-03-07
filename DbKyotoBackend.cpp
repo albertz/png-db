@@ -21,25 +21,49 @@ Return DbKyotoBackend::init() {
 	return true;
 }
 
-/*
-static Return __saveNewDbEntry(redisContext* redis, const std::string& prefix, DbEntryId& id, const std::string& content) {
+typedef PolyDB KyotoDB;
+
+static Return __addEntryToList(KyotoDB& db, const std::string& key, const std::string& entry) {
+	if(entry.size() > 255)
+		return "cannot add entries with size>255 to list";	
+	if(!db.append(key, rawString<uint8_t>(entry.size()) + entry))
+	   return std::string() + "error adding entry to list: " + db.error().name();
+	return true;
+}
+
+static Return __getEntryList(KyotoDB& db, const std::string& key, std::list<std::string>& entries) {
+	std::string value;
+	if(!db.get(key, &value))
+		return std::string() + "error getting entry list: " + db.error().name();
+	
+	size_t i = 0;
+	while(i < value.size()) {
+		uint8_t size = value[i];
+		++i;
+		if(i + size > value.size())
+			return "entry list data is inconsistent";
+		entries.push_back( value.substr(i, size) );
+		i += size;
+	}
+	
+	return true;
+}
+
+static Return __saveNewDbEntry(KyotoDB& db, DbEntryId& id, const std::string& content) {
 	unsigned short triesNum = (id.size() <= 4) ? (2 << id.size()) : 64;
 	for(unsigned short i = 0; i < triesNum; ++i) {
 		DbEntryId newId = id;
 		newId += (char)random();
-		std::string key = prefix + "data." + newId;
-		RedisReplyWrapper reply( redisCommand(redis, "SETNX %b %b", &key[0], key.size(), &content[0], content.size()) );
-		ASSERT( reply );
-		if(reply.reply->type == REDIS_REPLY_INTEGER && reply.reply->integer == 1) {
+		std::string key = "data." + newId;
+		if(db.add(key, content)) {
 			id = newId;
 			return true;
 		}
 	}
 	
 	id += (char)random();
-	return __saveNewDbEntry(redis, prefix, id, content);
+	return __saveNewDbEntry(db, id, content);
 }
- */
 
 Return DbKyotoBackend::push(/*out*/ DbEntryId& id, const DbEntry& entry) {
 	if(!entry.haveSha1())
@@ -49,10 +73,10 @@ Return DbKyotoBackend::push(/*out*/ DbEntryId& id, const DbEntry& entry) {
 	
 	// search for existing entry
 	std::string sha1refkey = "sha1ref." + entry.sha1;
-/*	RedisReplyWrapper reply( redisCommand(redis, "SMEMBERS %b", &sha1refkey[0], sha1refkey.size()) );
-	if(reply.reply->type == REDIS_REPLY_ARRAY)
-		for(int i = 0; i < reply.reply->elements; ++i) {
-			DbEntryId otherId = std::string(reply.reply->element[i]->str, reply.reply->element[i]->len);
+	std::list<std::string> sha1refs;
+	if(__getEntryList(db, sha1refkey, sha1refs))
+		for(std::list<std::string>::iterator i = sha1refs.begin(); i != sha1refs.end(); ++i) {
+			DbEntryId otherId = *i;
 			DbEntry otherEntry;
 			if(get(otherEntry, otherId)) {
 				if(entry == otherEntry) {
@@ -63,14 +87,13 @@ Return DbKyotoBackend::push(/*out*/ DbEntryId& id, const DbEntry& entry) {
 				}
 			}
 		}
-*/	
+
 	// write DB entry
 	id = "";
-//	ASSERT( __saveNewDbEntry(redis, prefix, id, entry.compressed) );
+	ASSERT( __saveNewDbEntry(db, id, entry.compressed) );
 	
 	// create sha1 ref
-//	reply = redisCommand(redis, "SADD %b %b", &sha1refkey[0], sha1refkey.size(), &id[0], id.size());
-//	ASSERT( reply );
+	ASSERT( __addEntryToList(db, sha1refkey, id) );
 	
 	stats.pushNew++;
 	return true;
@@ -78,14 +101,10 @@ Return DbKyotoBackend::push(/*out*/ DbEntryId& id, const DbEntry& entry) {
 
 Return DbKyotoBackend::get(/*out*/ DbEntry& entry, const DbEntryId& id) {
 	std::string key = "data." + id;
-/*	RedisReplyWrapper reply( redisCommand(redis, "GET %b", &key[0], key.size()) );
-	if(reply.reply->type == REDIS_REPLY_NIL)
-		return "DB get: entry not found";
-	if(reply.reply->type != REDIS_REPLY_STRING)
-		return "DB get: Redis: invalid GET reply";
-	entry.compressed = std::string(reply.reply->str, reply.reply->len); */
+	if(!db.get(key, &entry.compressed))
+		return std::string() + "DB get: error getting entry: " + db.error().name();
 	
-	//ASSERT( entry.uncompress() );
+	ASSERT( entry.uncompress() );
 	entry.calcSha1();
 	
 	return true;
@@ -94,36 +113,31 @@ Return DbKyotoBackend::get(/*out*/ DbEntry& entry, const DbEntryId& id) {
 Return DbKyotoBackend::pushToDir(const std::string& path, const DbDirEntry& dirEntry) {
 	std::string key = "fs." + path;
 	std::string dirEntryRaw = dirEntry.serialized();
-//	RedisReplyWrapper reply( redisCommand(redis, "SADD %b %b", &key[0], key.size(), &dirEntryRaw[0], dirEntryRaw.size()) );
+	ASSERT( __addEntryToList(db, key, dirEntryRaw) );
 	return true;
 }
 
 Return DbKyotoBackend::getDir(/*out*/ std::list<DbDirEntry>& dirList, const std::string& path) {
 	std::string key = "fs." + path;
-/*	RedisReplyWrapper reply( redisCommand(redis, "SMEMBERS %b", &key[0], key.size()) );
-	if(reply.reply->type != REDIS_REPLY_ARRAY)
-		return "DB getDir: invalid SMEMBERS reply";
+	std::list<std::string> entries;
+	ASSERT( __getEntryList(db, key, entries) );
+	for(std::list<std::string>::iterator i = entries.begin(); i != entries.end(); ++i)
+		dirList.push_back( DbDirEntry::FromSerialized(*i) );
 	
-	for(int i = 0; i < reply.reply->elements; ++i) {
-		std::string dirEntryRaw(reply.reply->element[i]->str, reply.reply->element[i]->len);
-		dirList.push_back( DbDirEntry::FromSerialized(dirEntryRaw) );
-	}*/
-
 	return true;
 }
 
 Return DbKyotoBackend::setFileRef(/*can be empty*/ const DbEntryId& id, const std::string& path) {
 	std::string key = "fs." + path;
-//	RedisReplyWrapper reply( redisCommand(redis, "SET %b %b", &key[0], key.size(), &id[0], id.size()) );
+	if(!db.set(key, id))
+		return std::string() + "DB setFileRef: error setting entry: " + db.error().name();
 	return true;
 }
 
 Return DbKyotoBackend::getFileRef(/*out (can be empty)*/ DbEntryId& id, const std::string& path) {
 	std::string key = "fs." + path;
-/*	RedisReplyWrapper reply( redisCommand(redis, "GET %b", &key[0], key.size()) );
-	if(reply.reply->type != REDIS_REPLY_STRING)
-		return "DB getFileRef: invalid GET reply";	
-	id = std::string(reply.reply->str, reply.reply->len); */
+	if(!db.get(key, &id))
+		return std::string() + "DB getFileRef: error getting entry: " + db.error().name();
 	return true;
 }
 
