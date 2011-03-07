@@ -20,9 +20,10 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 	
-	FILE* f = fopen(argv[1], "rb");
+	std::string filename = argv[1];
+	FILE* f = fopen(filename.c_str(), "rb");
 	if(f == NULL) {
-		cerr << "error: cannot open " << argv[1] << endl;
+		cerr << "error: cannot open " << filename << endl;
 		return 1;
 	}
 	
@@ -36,6 +37,10 @@ int main(int argc, char** argv) {
 			return 1;
 		}
 	}
+	
+	db.pushToDir("/", DbDirEntry::File(baseFilename(filename), ftell(f)));
+	db.setFileRef(dbPngWriter.contentId, "/" + baseFilename(filename));
+	fclose(f);
 	
 	cout << "content id: " << hexString(dbPngWriter.contentId) << endl;
 	cout << "num content entries: " << dbPngWriter.contentEntries.size() << endl;		

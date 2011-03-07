@@ -18,3 +18,19 @@ std::string hexString(const std::string& rawData) {
 		ret += hexString(rawData[i]);
 	return ret;
 }
+
+size_t findLastPathSep(const std::string& path) {
+	size_t slash = path.rfind('\\');
+	size_t slash2 = path.rfind('/');
+	if(slash == std::string::npos)
+		slash = slash2;
+	else if(slash2 != std::string::npos)
+		slash = std::max(slash, slash2);
+	return slash;
+}
+
+std::string baseFilename(const std::string& filename) {
+	size_t p = findLastPathSep(filename);
+	if(p == std::string::npos) return filename;
+	return filename.substr(p+1);
+}

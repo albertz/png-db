@@ -26,5 +26,7 @@ T valueFromRaw(const char* s) {
 	return val;
 }
 
+size_t findLastPathSep(const std::string& path);
+std::string	baseFilename(const std::string& filename);
 
 #endif

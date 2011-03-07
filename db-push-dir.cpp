@@ -49,6 +49,8 @@ int main(int argc, char** argv) {
 				break;
 			}
 		}
+		db.pushToDir("/", DbDirEntry::File(baseFilename(filename), ftell(f)));
+		db.setFileRef(dbPngWriter.contentId, "/" + baseFilename(filename));
 		fclose(f);
 		
 		cout << dir.filename << ": "
