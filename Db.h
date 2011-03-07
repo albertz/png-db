@@ -7,8 +7,11 @@
 #define __AZ__DB_H__
 
 #include "Return.h"
+#include "StringUtils.h"
 #include <string>
 #include <cassert>
+#include <stdint.h>
+#include <sys/stat.h>
 
 #define DbEntryType_PngContentList 1
 #define DbEntryType_PngChunk 2
@@ -45,10 +48,36 @@ struct DbStats {
 	DbStats() : pushNew(0), pushReuse(0) {}
 };
 
+struct DbDirEntry {
+	mode_t mode;
+	std::string name;
+	size_t size;
+	DbDirEntry(mode_t m = 0, const std::string& fn = "", size_t s = 0) : mode(m), name(fn), size(s) {}
+	std::string serialized() const { return rawString<uint16_t>(mode) + rawString<uint32_t>(size) + name; }
+	static DbDirEntry FromSerialized(const std::string& raw) {
+		if(raw.size() <= 6) return DbDirEntry();
+		return DbDirEntry(valueFromRaw<uint16_t>(&raw[0]), raw.substr(6), valueFromRaw<uint32_t>(&raw[2]));
+	}
+	static DbDirEntry File(const std::string& fn, size_t s) { return DbDirEntry(S_IFREG | 0444, fn, s); }
+	static DbDirEntry Dir(const std::string& fn) { return DbDirEntry(S_IFDIR | 0755, fn); }
+};
+
 struct DbIntf {
 	DbStats stats;
 	virtual Return push(/*out*/ DbEntryId& id, const DbEntry& entry) = 0;
 	virtual Return get(/*out*/ DbEntry& entry, const DbEntryId& id) = 0;
+	virtual Return pushToDir(const std::string& path, const DbDirEntry& dirEntry) {
+		return "Db::pushToDir: not implemented";
+	}
+	virtual Return getDir(/*out*/ std::list<DbDirEntry>& dirList, const std::string& path) {
+		return "Db::getDir: not implemented";
+	}
+	virtual Return setFileRef(/*can be empty*/ const DbEntryId& id, const std::string& path) {
+		return "Db::setFileRef: not implemented";
+	}
+	virtual Return getFileRef(/*out (can be empty)*/ DbEntryId& id, const std::string& path) {
+		return "Db::getFileRef: not implemented";
+	}
 };
 
 #endif

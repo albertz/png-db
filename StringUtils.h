@@ -19,4 +19,12 @@ std::string rawString(T val) {
 	return std::string((char*)&val, sizeof(T));
 }
 
+template<typename T>
+T valueFromRaw(const char* s) {
+	T val = *(const T*)s;
+	BEndianSwap(val);
+	return val;
+}
+
+
 #endif

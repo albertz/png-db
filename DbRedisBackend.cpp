@@ -71,7 +71,7 @@ Return DbRedisBackend::push(/*out*/ DbEntryId& id, const DbEntry& entry) {
 	
 	// search for existing entry
 	std::string sha1refkey = prefix + "sha1ref." + entry.sha1;
-	RedisReplyWrapper reply( redisCommand(redis, "SMEMBERS %b", &sha1refkey[0], sha1keyref.size()) );
+	RedisReplyWrapper reply( redisCommand(redis, "SMEMBERS %b", &sha1refkey[0], sha1refkey.size()) );
 	ASSERT( reply );
 	if(reply.reply->type == REDIS_REPLY_ARRAY)
 		for(int i = 0; i < reply.reply->elements; ++i) {
@@ -92,7 +92,7 @@ Return DbRedisBackend::push(/*out*/ DbEntryId& id, const DbEntry& entry) {
 	ASSERT( __saveNewDbEntry(redis, prefix, id, entry.compressed) );
 	
 	// create sha1 ref
-	reply = redisCommand(redis, "SADD %s %b", sha1refkey.c_str(), &id[0], id.size());
+	reply = redisCommand(redis, "SADD %b %b", &sha1refkey[0], sha1refkey.size(), &id[0], id.size());
 	ASSERT( reply );
 	
 	stats.pushNew++;
@@ -119,3 +119,44 @@ Return DbRedisBackend::get(/*out*/ DbEntry& entry, const DbEntryId& id) {
 	
 	return true;
 }
+
+Return DbRedisBackend::pushToDir(const std::string& path, const DbDirEntry& dirEntry) {
+	std::string key = prefix + "fs." + path;
+	std::string dirEntryRaw = dirEntry.serialized();
+	RedisReplyWrapper reply( redisCommand(redis, "SADD %b %b", &key[0], key.size(), &dirEntryRaw[0], dirEntryRaw.size()) );
+	ASSERT( reply );
+	return true;
+}
+
+Return DbRedisBackend::getDir(/*out*/ std::list<DbDirEntry>& dirList, const std::string& path) {
+	std::string key = prefix + "fs." + path;
+	RedisReplyWrapper reply( redisCommand(redis, "SMEMBERS %b", &key[0], key.size()) );
+	ASSERT( reply );
+	if(reply.reply->type != REDIS_REPLY_ARRAY)
+		return "DB getDir: invalid SMEMBERS reply";
+	
+	for(int i = 0; i < reply.reply->elements; ++i) {
+		std::string dirEntryRaw(reply.reply->element[i]->str, reply.reply->element[i]->len);
+		dirList.push_back( DbDirEntry::FromSerialized(dirEntryRaw) );
+	}
+
+	return true;
+}
+
+Return DbRedisBackend::setFileRef(/*can be empty*/ const DbEntryId& id, const std::string& path) {
+	std::string key = prefix + "fs." + path;
+	RedisReplyWrapper reply( redisCommand(redis, "SET %b %b", &key[0], key.size(), &id[0], id.size()) );
+	ASSERT( reply );
+	return true;
+}
+
+Return DbRedisBackend::getFileRef(/*out (can be empty)*/ DbEntryId& id, const std::string& path) {
+	std::string key = prefix + "fs." + path;
+	RedisReplyWrapper reply( redisCommand(redis, "GET %b", &key[0], key.size()) );
+	ASSERT( reply );
+	if(reply.reply->type != REDIS_REPLY_STRING)
+		return "DB getFileRef: invalid GET reply";	
+	id = std::string(reply.reply->str, reply.reply->len);
+	return true;
+}
+
