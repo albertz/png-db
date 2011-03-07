@@ -30,6 +30,8 @@ static inline Return fread_bytes(FILE* f, char* d, size_t s) {
 	return true;
 }
 
+Return fwrite_bytes(FILE* f, const char* d, size_t s);
+
 template<typename T>
 static inline Return fread_bytes(FILE* f, T& d) {
 	ASSERT( fread_bytes(f, &d[0], sizeof(T)/sizeof(d[0])) );
@@ -51,6 +53,20 @@ static Return fread_bigendian(FILE* stream, _D& d) {
 	ASSERT( fread_bytes(stream, (char*) &data, sizeof(T)) );
 	BEndianSwap(data);
 	d = (_D)data;
+	return true;
+}
+
+template <typename T>
+static Return fwrite_litendian(FILE* stream, T data) {
+	EndianSwap(data);
+	ASSERT( fwrite_bytes(stream, (const char*) &data, sizeof(T)) );
+	return true;
+}
+
+template <typename T>
+static Return fwrite_bigendian(FILE* stream, T data) {
+	BEndianSwap(data);
+	ASSERT( fwrite_bytes(stream, (const char*) &data, sizeof(T)) );
 	return true;
 }
 

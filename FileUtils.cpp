@@ -33,19 +33,20 @@ Return fread_all(FILE* fp, std::string& out) {
 	return true;
 }
 
-Return fwrite_all(FILE* fp, const std::string& in) {
-	const char* inP = &in[0];
-	size_t remaining = in.size();
-	
-	while(remaining > 0) {
+Return fwrite_bytes(FILE* fp, const char* d, size_t size) {
+	while(size > 0) {
 		if(ferror(fp))
 			return "file-write-error";
-		size_t n = fwrite(inP, 1, remaining, fp);
-		remaining -= n;
-		inP += n;
+		size_t n = fwrite(d, 1, size, fp);
+		d += n;
+		size -= n;
 	}
 	
-	return true;
+	return true;	
+}
+
+Return fwrite_all(FILE* fp, const std::string& in) {
+	return fwrite_bytes(fp, &in[0], in.size());
 }
 
 DirIter::~DirIter() {
