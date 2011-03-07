@@ -8,9 +8,9 @@
 #include "Utils.h"
 #include <cstdio>
 
-DbRedisBackend::DbRedisBackend(const std::string& _prefix, const std::string& ip, int port) {
+DbRedisBackend::DbRedisBackend(const std::string& _prefix, const std::string& host, int port) {
 	prefix = _prefix;
-	redis = redisConnect(ip.c_str(), port);
+	redis = redisConnect(host.c_str(), port);
 }
 
 DbRedisBackend::~DbRedisBackend() {
@@ -61,6 +61,8 @@ Return DbRedisBackend::push(/*out*/ DbEntryId& id, const DbEntry& entry) {
 		return "DB push: entry compression not calculated";
 	if(redis == NULL)
 		return "DB push: Redis connection not initialized";
+	if(!(redis->flags & REDIS_CONNECTED))
+		return "DB push: Redis not connected";		
 	
 	// search for existing entry
 	std::string sha1refkey = prefix + "sha1ref." + hexString(entry.sha1);
@@ -95,6 +97,8 @@ Return DbRedisBackend::push(/*out*/ DbEntryId& id, const DbEntry& entry) {
 Return DbRedisBackend::get(/*out*/ DbEntry& entry, const DbEntryId& id) {
 	if(redis == NULL)
 		return "DB get: Redis connection not initialized";
+	if(!(redis->flags & REDIS_CONNECTED))
+		return "DB get: Redis not connected";		
 
 	std::string key = prefix + "data." + hexString(id);
 	RedisReplyWrapper reply( redisCommand(redis, "GET %s", key.c_str()) );

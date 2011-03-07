@@ -13,7 +13,7 @@ struct DbRedisBackend : DbIntf {
 	std::string prefix;
 	redisContext* redis;
 	
-	DbRedisBackend(const std::string& prefix = "db.", const std::string& ip = "127.0.0.1", int port = 6379);
+	DbRedisBackend(const std::string& prefix = "db.", const std::string& host = "127.0.0.1", int port = 6379);
 	~DbRedisBackend();
 	Return push(/*out*/ DbEntryId& id, const DbEntry& entry);
 	Return get(/*out*/ DbEntry& entry, const DbEntryId& id);
