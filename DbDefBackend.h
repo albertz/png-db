@@ -6,8 +6,8 @@
 #ifndef __AZ_DBDEFBACKEND_H__
 #define __AZ_DBDEFBACKEND_H__
 
-#include "DbRedisBackend.h"
+#include "DbKyotoBackend.h"
 
-typedef DbRedisBackend DbDefBackend;
+typedef DbKyotoBackend DbDefBackend;
 
 #endif
