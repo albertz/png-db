@@ -51,6 +51,7 @@ static Return listDir(const std::string& path) {
 static Return _main() {
 	DbDefBackend dbInst;
 	db = &dbInst;
+	db->setReadOnly(true);
 	ASSERT( db->init() );
 	ASSERT( listDir("") );
 	return true;

@@ -64,6 +64,7 @@ struct DbDirEntry {
 
 struct DbIntf {
 	DbStats stats;
+	virtual Return setReadOnly(bool ro) { return "Db::setReadOnly: not implemented"; }
 	virtual Return init() = 0;
 	virtual Return push(/*out*/ DbEntryId& id, const DbEntry& entry) = 0;
 	virtual Return get(/*out*/ DbEntry& entry, const DbEntryId& id) = 0;

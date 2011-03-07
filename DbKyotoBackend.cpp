@@ -13,10 +13,11 @@ using namespace std;
 using namespace kyotocabinet;
 
 DbKyotoBackend::~DbKyotoBackend() {
+	db.close();
 }
 
 Return DbKyotoBackend::init() {
-	if(!db.open(filename, PolyDB::OWRITER | PolyDB::OCREATE))
+	if(!db.open(filename, readonly ? PolyDB::OREADER : (PolyDB::OWRITER | PolyDB::OCREATE)))
 		return std::string() + "failed to open KyotoCabinet DB: " + db.error().name();
 	return true;
 }
