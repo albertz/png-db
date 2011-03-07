@@ -118,6 +118,7 @@ static Return __finishBlock(DbPngEntryReader& png) {
 	for(short y = 0; y < png.blockList.blockHeight; ++y)
 		png.writer.scanlines.push_back(scanlines[y]);
 	
+	png.blockList = DbPngEntryBlockList();
 	return true;
 }
 
