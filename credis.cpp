@@ -158,7 +158,7 @@ static int cr_moremem(cr_buffer *buf, int size)
 
   DEBUG("allocate %d x CR_BUFFER_SIZE, total %d bytes", n, total);
 
-  ptr = realloc(buf->data, total);
+  ptr = (char*)realloc(buf->data, total);
   if (ptr == NULL)
     return -1;
 
@@ -183,8 +183,8 @@ static int cr_morebulk(cr_multibulk *mb, int size)
 
   DEBUG("allocate %d x CR_MULTIBULK_SIZE, total %d (%lu bytes)", 
         n, total, total * ((sizeof(char *)+sizeof(int))));
-  cptr = realloc(mb->bulks, total * sizeof(char *));
-  iptr = realloc(mb->idxs, total * sizeof(int));
+  cptr = (char**)realloc(mb->bulks, total * sizeof(char *));
+  iptr = (int*)realloc(mb->idxs, total * sizeof(int));
 
   if (cptr == NULL || iptr == NULL)
     return CREDIS_ERR_NOMEM;
@@ -580,11 +580,11 @@ REDIS cr_new(void)
 {
   REDIS rhnd;
 
-  if ((rhnd = calloc(sizeof(cr_redis), 1)) == NULL ||
-      (rhnd->ip = malloc(32)) == NULL ||
-      (rhnd->buf.data = malloc(CR_BUFFER_SIZE)) == NULL ||
-      (rhnd->reply.multibulk.bulks = malloc(sizeof(char *)*CR_MULTIBULK_SIZE)) == NULL ||
-      (rhnd->reply.multibulk.idxs = malloc(sizeof(int)*CR_MULTIBULK_SIZE)) == NULL) {
+  if ((rhnd = (REDIS)calloc(sizeof(cr_redis), 1)) == NULL ||
+      (rhnd->ip = (char*)malloc(32)) == NULL ||
+      (rhnd->buf.data = (char*)malloc(CR_BUFFER_SIZE)) == NULL ||
+      (rhnd->reply.multibulk.bulks = (char**)malloc(sizeof(char *)*CR_MULTIBULK_SIZE)) == NULL ||
+      (rhnd->reply.multibulk.idxs = (int*)malloc(sizeof(int)*CR_MULTIBULK_SIZE)) == NULL) {
     cr_delete(rhnd);
     return NULL;   
   }
