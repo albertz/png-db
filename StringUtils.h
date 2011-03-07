@@ -12,11 +12,17 @@
 
 std::string hexString(char c);
 std::string hexString(const std::string& rawData);
+inline static std::string hexString(const char* s) { return hexString(std::string(s)); }
 
 template<typename T>
 std::string rawString(T val) {
 	BEndianSwap(val);
 	return std::string((char*)&val, sizeof(T));
+}
+
+template<typename T>
+std::string hexString(T val) {
+	return hexString(rawString<T>(val));
 }
 
 template<typename T>
