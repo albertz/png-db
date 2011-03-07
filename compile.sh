@@ -31,6 +31,7 @@ function listdeps() {
 
 typeset -A C
 C[cpp]=g++
+C[cc]=g++
 C[c]=gcc
 
 # $1 - c/cpp-file
@@ -43,7 +44,7 @@ function srccompile() {
 	mkdir -p "$(dirname "$o")"
 	[ -e $deps ] && checkdeps $o $f $(listdeps $deps) && echo "uptodate: $o" && return 0
 	echo "compiling $o"
-	$C[$fext] -c -MMD -MF $deps -o $o -iquote $INCLUDE -g $f || exit -1
+	$C[$fext] -c -MMD -MF $deps -o $o -iquote $INCLUDE -I $(dirname $f) -g $f || exit -1
 }
 
 # $1 - c/cpp-file
@@ -73,6 +74,10 @@ done
 for f in hiredis/*.c; do
 	srccompile "$f"
 	OBJS=($OBJS "$BUILDDIR/${f/.c/.o}")
+done
+for f in kyotocabinet/*.cc; do
+	srccompile "$f"
+	OBJS=($OBJS "$BUILDDIR/${f/.cc/.o}")
 done
 
 mkdir -p bin
