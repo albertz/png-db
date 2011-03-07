@@ -31,10 +31,6 @@
 #ifndef __CREDIS_H
 #define __CREDIS_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 
 /*
  * Functions list below is modelled after the Redis Command Reference (except
@@ -476,9 +472,5 @@ int credis_slaveof(REDIS rhnd, const char *host, int port);
  * CONFIG Configure a Redis server at runtime
  */
 
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* __CREDIS_H */

@@ -28,8 +28,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-extern "C" {
-
 #ifdef WIN32
 #define _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_DEPRECATE
@@ -1542,5 +1540,3 @@ int credis_zunionstore(REDIS rhnd, const char *destkey, int keyc, const char **k
   return cr_zstore(rhnd, 0, destkey, keyc, keyv, weightv, aggregate);
 }
 
-
-} // extern "C"
