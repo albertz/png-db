@@ -36,7 +36,12 @@ struct DbEntry {
 		assert(haveCompressed());
 		assert(other.haveSha1());
 		assert(other.haveCompressed());
-		return sha1 == other.sha1 && compressed == other.compressed;
+		if(sha1 != other.sha1) return false;
+		// Note: If we would ensure that the compression algorithm always works exactly
+		// the same way, we could just restrict the check on the compressed data.
+		// But as we don't want to restrict ourself to this, we can't.
+		if(compressed == other.compressed) return true;
+		return data == other.data;
 	}
 };
 
