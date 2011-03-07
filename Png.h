@@ -21,6 +21,8 @@ struct PngChunk {
 
 Return png_read_sig(FILE* f);
 Return png_read_chunk(FILE* f, PngChunk& chunk);
+Return png_write_sig(FILE* f);
+Return png_write_chunk(FILE* f, const PngChunk& chunk);
 
 struct PngHeader {
 	static const size_t SIZE = 13;
@@ -74,6 +76,20 @@ struct PngReader {
 	PngReader(FILE* f = NULL);
 	~PngReader();
 	Return read();
+};
+
+struct PngWriter {
+	FILE* file;
+	z_stream stream;
+	std::list<PngChunk> chunks;
+	std::list<std::string> scanlines;
+	std::list<std::string> dataChunks;
+	bool hasInitialized, hasFinishedWriting; // these are set from write()
+	bool hasAllChunks, hasAllScanlines; // these are expected to be set from outside
+
+	PngWriter(FILE* f = NULL);
+	~PngWriter();
+	Return write();
 };
 
 #endif

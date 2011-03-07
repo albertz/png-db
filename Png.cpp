@@ -3,6 +3,18 @@
  * code under LGPL
  */
 
+#ifndef Z_CompressionLevel
+#define Z_CompressionLevel 9
+#endif
+
+#ifndef PngDataChunkSize
+#define PngDataChunkSize 8192
+#endif
+
+#ifndef Z_BufSize
+#define Z_BufSize 1024*128
+#endif
+
 #include "Png.h"
 #include "FileUtils.h"
 #include "Crc.h"
@@ -14,12 +26,18 @@
 #include <iostream>
 using namespace std;
 
+static const char PNGSIG[8] = {137,80,78,71,13,10,26,10};
+
 Return png_read_sig(FILE* f) {
-	static const char PNGSIG[8] = {137,80,78,71,13,10,26,10};
 	char sig[sizeof(PNGSIG)]; memset(sig, 0, sizeof(PNGSIG));
 	ASSERT( fread_bytes(f, sig) );
 	if(memcmp(PNGSIG, sig, sizeof(PNGSIG)) != 0)
 		return "PNG signature wrong";
+	return true;
+}
+
+Return png_write_sig(FILE* f) {
+	ASSERT( fwrite_bytes(f, PNGSIG, sizeof(PNGSIG)) );
 	return true;
 }
 
@@ -42,6 +60,15 @@ Return png_read_chunk(FILE* f, PngChunk& chunk) {
 	if(crc != calc_crc(chunk.type, chunk.data))
 		return "CRC does not match";
 	
+	return true;
+}
+
+Return png_write_chunk(FILE* f, const PngChunk& chunk) {
+	ASSERT_EXT( fwrite_bigendian<uint32_t>(f, chunk.data.size()), "failed to write chunk len" );
+	if(chunk.type.size() != 4) return "chunk type size is invalid";
+	ASSERT_EXT( fwrite_all(f, chunk.type), "failed to write chunk type" );
+	ASSERT_EXT( fwrite_all(f, chunk.data), "failed to write chunk data" );
+	ASSERT_EXT( fwrite_bigendian<uint32_t>(f, calc_crc(chunk.type, chunk.data)), "failed to write chunk CRC" );
 	return true;
 }
 
@@ -213,3 +240,103 @@ PngReader::~PngReader() {
 	inflateEnd(&stream);
 }
 
+PngWriter::PngWriter(FILE* f) {
+	file = f;
+	stream.zalloc = Z_NULL;
+	stream.zfree = Z_NULL;
+	stream.opaque = Z_NULL;
+	hasInitialized = hasFinishedWriting = false;
+	hasAllChunks = hasAllScanlines = false;
+}
+
+PngWriter::~PngWriter() {
+	deflateEnd(&stream);
+}
+
+static Return __PngWriter_feedCompressedData(PngWriter& png, const char* data, size_t size) {
+	if(png.dataChunks.size() > 0 && png.dataChunks.back().size() < PngDataChunkSize) {
+		size_t feedSize = std::min(size, (size_t)PngDataChunkSize - png.dataChunks.back().size());
+		png.dataChunks.back() += std::string(data, feedSize);
+		data += feedSize;
+		size -= feedSize;
+	}
+	
+	while(size > 0) {
+		std::string dataChunk(data, std::min((size_t)PngDataChunkSize, size));
+		data += dataChunk.size();
+		size -= dataChunk.size();
+		png.dataChunks.push_back(dataChunk);
+	}
+	
+	return true;
+}
+
+static Return __PngWriter_feedData(PngWriter& png, const std::string& data, bool isFinal) {
+	png.stream.avail_in = data.size();
+	png.stream.next_in = (unsigned char*) &data[0];
+	while(true) {
+		char outputData[Z_BufSize];
+		png.stream.avail_out = sizeof(outputData);
+		png.stream.next_out = (unsigned char*) outputData;
+		int ret = deflate(&png.stream, isFinal ? Z_FINISH : Z_NO_FLUSH);
+		switch(ret) {
+			case Z_OK: break;
+			case Z_STREAM_END: break;
+			// these cases should not happen. but check anyway
+			case Z_STREAM_ERROR:
+			default:
+				cerr << "error to deflate " << data.size() << " bytes" << endl;
+				cerr << "remaining: " << png.stream.avail_in << " bytes" << endl;
+				cerr << "deflate ret: " << ret << endl;
+				assert(false);
+				return false;
+		}
+		size_t out_size = sizeof(outputData) - png.stream.avail_out;
+		ASSERT( __PngWriter_feedCompressedData(png, outputData, out_size) );
+		if(png.stream.avail_out != 0) break;
+		if(ret == Z_STREAM_END) break;
+	}
+	return true;
+}
+
+Return PngWriter::write() {
+	if(!hasInitialized) {
+		deflateInit(&stream, Z_CompressionLevel);
+		ASSERT( png_write_sig(file) );
+		hasInitialized = true;
+		return true;
+	}
+	
+	if(chunks.size() > 0) {
+		ASSERT( png_write_chunk(file, chunks.front()) );
+		chunks.pop_front();
+		return true;
+	}
+	if(!hasAllChunks) return true; // just wait but don't fail
+
+	if(dataChunks.size() > 0) {
+		PngChunk chunk;
+		chunk.type = "IDAT";
+		chunk.data = dataChunks.front();
+		ASSERT( png_write_chunk(file, chunk) );
+		dataChunks.pop_front();
+		return true;
+	}
+	
+	if(scanlines.size() > 0) {
+		ASSERT( __PngWriter_feedData(*this, scanlines.front(), hasAllScanlines && scanlines.size() == 1) );
+		scanlines.pop_front();
+		return true;
+	}
+	if(!hasAllScanlines) return true; // just wait but don't fail
+	
+	if(!hasFinishedWriting) {
+		PngChunk chunk;
+		chunk.type = "IEND";
+		ASSERT( png_write_chunk(file, chunk) );
+		hasFinishedWriting = true;
+		return true;
+	}
+	
+	return "we are already finished with writing";
+}
