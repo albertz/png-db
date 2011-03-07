@@ -52,6 +52,7 @@ function srccompile() {
 typeset -A Lflags
 Lflags[.]="-lz"
 Lflags[db-fuse.cpp]="-lfuse"
+[ "$(uname)" = "Darwin" ] && Lflags[db-fuse.cpp]="-lfuse_ino64"
 
 # $1 - c/cpp-file
 # will link all the $OBJS together
