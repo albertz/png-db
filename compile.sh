@@ -62,7 +62,7 @@ function srclink() {
 BINS=("test-png-dumpchunks.cpp" "test-png-reader.cpp"
 	"pnginfo.cpp"
 	"db-push.cpp" "db-push-dir.cpp"
-	"db-list-dir.cpp")
+	"db-list-dir.cpp" "db-extract-file.cpp")
 
 # compile all sources
 OBJS=()
