@@ -23,7 +23,7 @@ using namespace std;
 
 static DbIntf* db = NULL;
 
-#define DEBUG
+//#define DEBUG
 
 #ifdef DEBUG
 #define debugPrint(out, msg) { out << "**** " << (std::string() + msg) << " ****" << endl; }
