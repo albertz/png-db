@@ -25,22 +25,23 @@ static DbIntf* db = NULL;
 #define DEBUG
 
 #ifdef DEBUG
-#define debugPrint(msg) { cerr << (std::string() + msg) << endl; }
+#define debugPrint(out, msg) { out << "**** " << (std::string() + msg) << " ****" << endl; }
 #else
-#define debugPrint(msg) {}
+#define debugPrint(out, msg) {}
 #endif
 
 #define CHECK_RET(x, err_ret, err_msg) \
-	{ Return ___r = (x); if(!___r) { debugPrint(err_msg + ": " + ___r.errmsg); return err_ret; } }
+	{ Return ___r = (x); if(!___r) { debugPrint(cerr, err_msg + ": " + ___r.errmsg); return err_ret; } }
 
 
 static int db_getattr(const char *path, struct stat *stbuf) {
     memset(stbuf, 0, sizeof(struct stat));
+	debugPrint(cout, "db_getattr: " + path);
 	
 	if(*path == '/') ++path; // skip '/' at the beginning
 	if(*path == '\0') {
         stbuf->st_mode = S_IFDIR | 0755;
-        stbuf->st_nlink = 3;
+        stbuf->st_nlink = 2;
 	}
 	else {
 		std::string filename = path;
