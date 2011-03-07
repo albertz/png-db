@@ -7,7 +7,9 @@
 #define Z_CompressionLevel 9
 #endif
 
+#ifndef Z_BufSize
 #define Z_BufSize 1024*128
+#endif
 
 #include "Db.h"
 #include "Sha1.h"
