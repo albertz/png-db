@@ -29,8 +29,15 @@ static Return listDir(const std::string& path) {
 		else
 			cout << hexString(i->mode) << ": ";
 		cout << path << "/" << i->name;
-		if(i->mode & S_IFREG)
+		if(i->mode & S_IFREG) {
 			cout << ", " << i->size << " bytes";
+			DbEntryId id;
+			ASSERT( db->getFileRef(id, path + "/" + i->name) );
+			if(id.size() > 0)
+				cout << ", ref=" << hexString(id);
+			else
+				cout << ", empty";
+		}
 		else if(i->mode & S_IFDIR)
 			cout << "/";
 		cout << endl;
