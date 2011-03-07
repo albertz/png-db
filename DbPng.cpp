@@ -172,6 +172,7 @@ Return DbPngEntryReader::next() {
 	if(contentEntries.size() > 0) {
 		DbEntry entry;
 		ASSERT( db->get(entry, contentEntries.front()) );
+		contentEntries.pop_front();
 		if(entry.data.size() == 0)
 			return "content entry data is empty";
 		switch(entry.data[0]) {
