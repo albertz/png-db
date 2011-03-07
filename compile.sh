@@ -6,7 +6,6 @@
 
 cd "$(dirname $0)"
 ROOTDIR="$(pwd)"
-CFLAGS="-I kyotocabinet"
 BUILDDIR="build"
 
 # $1 - target
@@ -34,6 +33,9 @@ C[cpp]=g++
 C[cc]=g++
 C[c]=gcc
 
+typeset -A Cflags
+Cflags[.]="-I kyotocabinet"
+
 # $1 - c/cpp-file
 # will compile the o-file
 function srccompile() {
@@ -44,8 +46,12 @@ function srccompile() {
 	mkdir -p "$(dirname "$o")"
 	[ -e $deps ] && checkdeps $o $f $(listdeps $deps) && echo "uptodate: $o" && return 0
 	echo "compiling $o"
-	$C[$fext] -c -MMD -MF $deps -o $o -iquote $(dirname $f) ${(z)CFLAGS} -g $f || exit -1
+	$C[$fext] -c -MMD -MF $deps -o $o -iquote $(dirname $f) ${(z)Cflags[$f]} ${(z)Cflags[.]} -g $f || exit -1
 }
+
+typeset -A Lflags
+Lflags[.]="-lz"
+Lflags[db-fuse.cpp]="-lfuse"
 
 # $1 - c/cpp-file
 # will link all the $OBJS together
@@ -56,13 +62,14 @@ function srclink() {
 	local b="bin/${f/.${fext}/}"
 	checkdeps $b $OBJS $o && echo "uptodate: $b" && return 0
 	echo "linking $b"
-	$C[$fext] $OBJS $o -o $b ${(z)2} || exit -1
+	$C[$fext] $OBJS $o -o $b ${(z)Lflags[$f]} ${(z)Lflags[.]} || exit -1
 }
 
 BINS=("test-png-dumpchunks.cpp" "test-png-reader.cpp"
 	"pnginfo.cpp"
 	"db-push.cpp" "db-push-dir.cpp"
-	"db-list-dir.cpp" "db-extract-file.cpp")
+	"db-list-dir.cpp" "db-extract-file.cpp"
+	"db-fuse.cpp")
 
 # compile all sources
 OBJS=()
@@ -82,5 +89,5 @@ done
 
 mkdir -p bin
 for b in $BINS; do
-	srclink $b "-lz"
+	srclink $b
 done
