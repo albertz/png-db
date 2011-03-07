@@ -8,6 +8,7 @@
 #include "Utils.h"
 #include "DbPng.h"
 
+#include <pthread.h>
 #include <string>
 #include <errno.h>
 #include <fcntl.h>
@@ -101,8 +102,15 @@ static int db_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     return 0;
 }
 
+static pthread_mutex_t lastReadMutex;
 static std::string lastReadFileName;
 static std::string lastReadFileContent;
+
+struct ScopedLock : DontCopyTag {
+	pthread_mutex_t* mutex;
+	ScopedLock(pthread_mutex_t& m) : mutex(&m) { pthread_mutex_lock(mutex); }
+	~ScopedLock() { pthread_mutex_unlock(mutex); }
+};
 
 static int __return_content(char *buf, size_t size, off_t offset) {
 	const std::string& content = lastReadFileContent;
@@ -124,6 +132,8 @@ static int db_read(const char *path, char *buf, size_t size, off_t offset,
 	
 	std::string filename = path;
 	filename = dirName(filename) + "/" + baseFilename(filename);
+
+	ScopedLock lock(lastReadMutex);
 	if(lastReadFileName == filename)
 		return __return_content(buf, size, offset);
 	
@@ -157,6 +167,8 @@ int main(int argc, char **argv) {
 		cerr << "error: failed to init DB: " << r.errmsg << endl;
 		return 1;
 	}
+	
+	pthread_mutex_init(&lastReadMutex, NULL);
 	
 	struct fuse_operations ops;
 	memset(&ops, 0, sizeof(ops));
