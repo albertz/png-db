@@ -34,5 +34,6 @@ T valueFromRaw(const char* s) {
 
 size_t findLastPathSep(const std::string& path);
 std::string	baseFilename(const std::string& filename);
+std::string	dirName(const std::string& filename);
 
 #endif

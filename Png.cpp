@@ -18,6 +18,7 @@
 #include "Png.h"
 #include "FileUtils.h"
 #include "Crc.h"
+#include "StringUtils.h"
 
 #include <cstring>
 #include <stdint.h>
@@ -36,8 +37,8 @@ Return png_read_sig(FILE* f) {
 	return true;
 }
 
-Return png_write_sig(FILE* f) {
-	ASSERT( fwrite_bytes(f, PNGSIG, sizeof(PNGSIG)) );
+Return png_write_sig(WriteCallbackIntf* w) {
+	ASSERT( w->write(PNGSIG, sizeof(PNGSIG)) );
 	return true;
 }
 
@@ -63,12 +64,12 @@ Return png_read_chunk(FILE* f, PngChunk& chunk) {
 	return true;
 }
 
-Return png_write_chunk(FILE* f, const PngChunk& chunk) {
-	ASSERT_EXT( fwrite_bigendian<uint32_t>(f, chunk.data.size()), "failed to write chunk len" );
+Return png_write_chunk(WriteCallbackIntf* w, const PngChunk& chunk) {
+	ASSERT_EXT( w->write(rawString<uint32_t>(chunk.data.size())), "failed to write chunk len" );
 	if(chunk.type.size() != 4) return "chunk type size is invalid";
-	ASSERT_EXT( fwrite_all(f, chunk.type), "failed to write chunk type" );
-	ASSERT_EXT( fwrite_all(f, chunk.data), "failed to write chunk data" );
-	ASSERT_EXT( fwrite_bigendian<uint32_t>(f, calc_crc(chunk.type, chunk.data)), "failed to write chunk CRC" );
+	ASSERT_EXT( w->write(chunk.type), "failed to write chunk type" );
+	ASSERT_EXT( w->write(chunk.data), "failed to write chunk data" );
+	ASSERT_EXT( w->write(rawString<uint32_t>(calc_crc(chunk.type, chunk.data))), "failed to write chunk CRC" );
 	return true;
 }
 
@@ -240,8 +241,8 @@ PngReader::~PngReader() {
 	inflateEnd(&stream);
 }
 
-PngWriter::PngWriter(FILE* f) {
-	file = f;
+PngWriter::PngWriter(WriteCallbackIntf* w) {
+	writer = w;
 	stream.zalloc = Z_NULL;
 	stream.zfree = Z_NULL;
 	stream.opaque = Z_NULL;
@@ -302,13 +303,13 @@ static Return __PngWriter_feedData(PngWriter& png, const std::string& data, bool
 Return PngWriter::write() {
 	if(!hasInitialized) {
 		deflateInit(&stream, Z_CompressionLevel);
-		ASSERT( png_write_sig(file) );
+		ASSERT( png_write_sig(writer) );
 		hasInitialized = true;
 		return true;
 	}
 	
 	if(chunks.size() > 0) {
-		ASSERT( png_write_chunk(file, chunks.front()) );
+		ASSERT( png_write_chunk(writer, chunks.front()) );
 		chunks.pop_front();
 		return true;
 	}
@@ -321,7 +322,7 @@ Return PngWriter::write() {
 			PngChunk chunk;
 			chunk.type = "IDAT";
 			chunk.data = dataChunks.front();
-			ASSERT( png_write_chunk(file, chunk) );
+			ASSERT( png_write_chunk(writer, chunk) );
 			dataChunks.pop_front();
 			return true;
 		}
@@ -337,7 +338,7 @@ Return PngWriter::write() {
 	if(!hasFinishedWriting) {
 		PngChunk chunk;
 		chunk.type = "IEND";
-		ASSERT( png_write_chunk(file, chunk) );
+		ASSERT( png_write_chunk(writer, chunk) );
 		hasFinishedWriting = true;
 		return true;
 	}

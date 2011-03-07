@@ -85,4 +85,10 @@ struct DirIter : DontCopyTag {
 
 Return createRecDir(const std::string& abs_filename, bool last_is_dir = true);
 
+struct FileWriteCallback : WriteCallbackIntf {
+	FILE* file;
+	FileWriteCallback(FILE* f) : file(f) {}
+	Return write(const char* data, size_t s) { return fwrite_bytes(file, data, s); }
+};
+
 #endif

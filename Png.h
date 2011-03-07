@@ -7,6 +7,7 @@
 #define __AZ__PNG_H__
 
 #include "Return.h"
+#include "Utils.h"
 
 #include <string>
 #include <list>
@@ -21,8 +22,8 @@ struct PngChunk {
 
 Return png_read_sig(FILE* f);
 Return png_read_chunk(FILE* f, PngChunk& chunk);
-Return png_write_sig(FILE* f);
-Return png_write_chunk(FILE* f, const PngChunk& chunk);
+Return png_write_sig(WriteCallbackIntf* w);
+Return png_write_chunk(WriteCallbackIntf* w, const PngChunk& chunk);
 
 struct PngHeader {
 	static const size_t SIZE = 13;
@@ -79,7 +80,7 @@ struct PngReader {
 };
 
 struct PngWriter {
-	FILE* file;
+	WriteCallbackIntf* writer;
 	z_stream stream;
 	std::list<PngChunk> chunks;
 	std::list<std::string> scanlines;
@@ -87,7 +88,7 @@ struct PngWriter {
 	bool hasInitialized, hasFinishedWriting; // these are set from write()
 	bool hasAllChunks, hasAllScanlines; // these are expected to be set from outside
 
-	PngWriter(FILE* f = NULL);
+	PngWriter(WriteCallbackIntf* w = NULL);
 	~PngWriter();
 	Return write();
 };

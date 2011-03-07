@@ -8,6 +8,7 @@
 
 #include "Png.h"
 #include "Db.h"
+#include "Utils.h"
 #include <cstdio>
 #include <string>
 #include <list>
@@ -39,8 +40,8 @@ struct DbPngEntryReader {
 	bool haveContentEntries;
 	DbPngEntryBlockList blockList;
 	
-	DbPngEntryReader(FILE* f, DbIntf* _db, const DbEntryId& _contentId)
-	: writer(f), db(_db), contentId(_contentId), haveContentEntries(false) {}
+	DbPngEntryReader(WriteCallbackIntf* w, DbIntf* _db, const DbEntryId& _contentId)
+	: writer(w), db(_db), contentId(_contentId), haveContentEntries(false) {}
 	Return next();
 	operator bool() const { return !writer.hasFinishedWriting; }
 };

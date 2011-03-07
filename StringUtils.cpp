@@ -34,3 +34,9 @@ std::string baseFilename(const std::string& filename) {
 	if(p == std::string::npos) return filename;
 	return filename.substr(p+1);
 }
+
+std::string	dirName(const std::string& filename) {
+	size_t p = findLastPathSep(filename);
+	if(p == std::string::npos) return "";
+	return filename.substr(0, p);
+}

@@ -7,6 +7,7 @@
 #include "DbDefBackend.h"
 #include "DbPng.h"
 #include "StringUtils.h"
+#include "FileUtils.h"
 
 #include <ctime>
 #include <cstdlib>
@@ -29,7 +30,8 @@ Return _main(const std::string& filename) {
 		return "cannot open " + extract_fn;
 	
 	if(!fileEntryId.empty()) {
-		DbPngEntryReader dbPngReader(f, &db, fileEntryId);
+		FileWriteCallback writer(f);
+		DbPngEntryReader dbPngReader(&writer, &db, fileEntryId);
 		while(dbPngReader)
 			ASSERT( dbPngReader.next() );
 	}

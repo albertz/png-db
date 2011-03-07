@@ -16,6 +16,7 @@
 #include <list>
 #include <cassert>
 #include <set>
+#include "Return.h"
 
 template <typename _dst, typename _src>
 bool isSameType(const _src& obj1, const _dst& obj2) {
@@ -55,6 +56,14 @@ std::vector<T> ListAsVector(const std::list<T>& l) {
 template<typename T> std::set<T> Set(T v1) { std::set<T> ret; ret.insert(v1); return ret; }
 template<typename T> std::set<T> Set(T v1, T v2) { std::set<T> ret; ret.insert(v1); ret.insert(v2); return ret; }
 template<typename T> std::set<T> Set(T v1, T v2, T v3) { std::set<T> ret; ret.insert(v1); ret.insert(v2); ret.insert(v3); return ret; }
+
+
+struct WriteCallbackIntf {
+	virtual Return write(const char* data, size_t s) = 0;
+	Return write(const std::string& data) { return write(&data[0], data.size()); }
+};
+
+
 
 #endif
 
