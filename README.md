@@ -30,8 +30,8 @@ Such data value (uncompressed) starts with a data-type-byte. Only 3 types are th
 There are multiple DB backend implementations:
 
 - The filesystem itself. But creates a lot of files!
-- Redis. As everything is in memory, you are a bit limited.
-- KyotoCabinet. (Currently the default.)
+- [Redis](http://redis.io/). Via [hiredis](https://github.com/antirez/hiredis). As everything is in memory, you are a bit limited.
+- [KyotoCabinet](http://fallabs.com/kyotocabinet/). (Currently the default.)
 
 Tools
 =====
@@ -49,6 +49,21 @@ Compilation
 Just run `./compile.sh`.
 
 For Mac: If you haven't MacFUSE installed, install it from here: <http://code.google.com/p/macfuse/>
+
+TODOs
+=====
+
+- Many parts could be optimized a lot.
+- Try with other DB backend implementations.
+Maybe [mongoDB](http://www.mongodb.org/) or [Basho Riak](http://www.basho.com/products_riak_overview.php).
+Or improve the filesystem implementation (which is incomplete anyway currently).
+- To make the FUSE interface faster, the caching must be improved.
+Also, there should be a way to get the filesize in advance and maybe also to seek in constant time.
+Probably, to make this possible, we need to have a fixed compression algorithm and
+the file summary must contain some offset information.
+- We could also store other image formats in a similar way. And also general files.
+There should be also a standard fallback.
+- The FUSE interface could also support writing.
 
 
 -Albert Zeyer, <http://www.az2000.de>
