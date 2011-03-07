@@ -153,7 +153,7 @@ Return DbPngEntryReader::next() {
 		ASSERT( db->get(entry, contentId) );
 		if(entry.data.size() == 0)
 			return "content entry list data is empty";
-		if(entry.data[0] != DbEntryType_PngBlock)
+		if(entry.data[0] != DbEntryType_PngContentList)
 			return "content entry list data is invalid";			
 		size_t i = 1;
 		while(i < entry.data.size()) {
