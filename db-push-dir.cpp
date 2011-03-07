@@ -28,6 +28,11 @@ Return _main(const std::string& dirname) {
 		if(dir.filename.substr(dir.filename.size()-4) != ".png") continue;
 		std::string filename = dirname + "/" + dir.filename;
 		
+		DbEntryId ref;
+		if(db.getFileRef(ref, "/" + baseFilename(filename)))
+			// skip files we already have in DB
+			continue;
+		
 		FILE* f = fopen(filename.c_str(), "rb");
 		if(f == NULL) {
 			cerr << "error: " << dir.filename << ": cannot open file" << endl;
