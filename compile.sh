@@ -29,27 +29,33 @@ function listdeps() {
 		#-e "s/^/\\\"/g" -e "s/$/\\\"/g" 
 }
 
-# $1 - cpp-file
+typeset -A C
+C[cpp]=g++
+C[c]=gcc
+
+# $1 - c/cpp-file
 # will compile the o-file
 function srccompile() {
 	local f="$1"
-	local o="$BUILDDIR/${f/.cpp/.o}"
+	local fext="${f##*.}"
+	local o="$BUILDDIR/${f/.${fext}/.o}"
 	local deps="$BUILDDIR/$f.deps"
 	mkdir -p "$(dirname "$o")"
 	[ -e $deps ] && checkdeps $o $f $(listdeps $deps) && echo "uptodate: $o" && return 0
 	echo "compiling $o"
-	g++ -c -MMD -MF $deps -o $o -iquote $INCLUDE -g $f || exit -1
+	$C[$fext] -c -MMD -MF $deps -o $o -iquote $INCLUDE -g $f || exit -1
 }
 
-# $1 - bin-file
+# $1 - c/cpp-file
 # will link all the $OBJS together
 function srclink() {
-	local cpp="$1"
-	local o="$BUILDDIR/${cpp/.cpp/.o}"
-	local b="bin/${cpp/.cpp/}"
+	local f="$1"
+	local fext="${f##*.}"
+	local o="$BUILDDIR/${f/.${fext}/.o}"
+	local b="bin/${f/.${fext}/}"
 	checkdeps $b $OBJS $o && echo "uptodate: $b" && return 0
 	echo "linking $b"
-	g++ $OBJS $o -o $b ${(z)2} || exit -1
+	$C[$fext] $OBJS $o -o $b ${(z)2} || exit -1
 }
 
 BINS=("test-png-dumpchunks.cpp" "test-png-reader.cpp" "pnginfo.cpp" "db-push.cpp" "db-push-dir.cpp")
