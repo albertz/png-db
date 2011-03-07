@@ -4,7 +4,7 @@
  */
 
 #include "Png.h"
-#include "Db.h"
+#include "DbFsBackend.h"
 #include "DbPng.h"
 #include "StringUtils.h"
 #include "FileUtils.h"
@@ -22,7 +22,7 @@ int main(int argc, char** argv) {
 	}
 	
 	srandom(time(NULL));
-	Db db("db");
+	DbFsBackend db("db");
 
 	std::string dirname = argv[1];
 	DirIter dir(dirname);

@@ -45,13 +45,10 @@ struct DbStats {
 	DbStats() : pushNew(0), pushReuse(0) {}
 };
 
-struct Db {
-	std::string baseDir;
+struct DbIntf {
 	DbStats stats;
-	
-	Db(const std::string& d = ".") : baseDir(d) {}
-	Return push(/*out*/ DbEntryId& id, const DbEntry& entry);
-	Return get(/*out*/ DbEntry& entry, const DbEntryId& id);
+	virtual Return push(/*out*/ DbEntryId& id, const DbEntry& entry) = 0;
+	virtual Return get(/*out*/ DbEntry& entry, const DbEntryId& id) = 0;
 };
 
 #endif

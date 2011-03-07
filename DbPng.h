@@ -12,11 +12,11 @@
 
 struct DbPngEntryWriter {
 	PngReader reader;
-	Db* db;
+	DbIntf* db;
 	std::list<DbEntryId> contentEntries;
 	DbEntryId contentId;
 	
-	DbPngEntryWriter(FILE* f, Db* _db) : reader(f), db(_db) {}
+	DbPngEntryWriter(FILE* f, DbIntf* _db) : reader(f), db(_db) {}
 	Return next();
 	operator bool() const { return !reader.hasFinishedReading; }
 };
