@@ -9,16 +9,40 @@
 #include "Png.h"
 #include "Db.h"
 #include <cstdio>
+#include <string>
+#include <list>
 
 struct DbPngEntryWriter {
 	PngReader reader;
 	DbIntf* db;
-	std::list<DbEntryId> contentEntries;
+	std::list<DbEntryId> contentChunkEntries;
+	std::list<DbEntryId> contentDataEntries;
 	DbEntryId contentId;
 	
 	DbPngEntryWriter(FILE* f, DbIntf* _db) : reader(f), db(_db) {}
 	Return next();
 	operator bool() const { return !reader.hasFinishedReading; }
+};
+
+struct DbPngEntryBlockList {
+	uint8_t blockHeight;
+	size_t scanlineWidth;
+	std::list<std::string> blocks;
+	DbPngEntryBlockList() : scanlineWidth(0), blockHeight(0) {}
+};
+
+struct DbPngEntryReader {
+	PngWriter writer;
+	DbIntf* db;
+	DbEntryId contentId;
+	std::list<DbEntryId> contentEntries;
+	bool haveContentEntries;
+	DbPngEntryBlockList blockList;
+	
+	DbPngEntryReader(FILE* f, DbIntf* _db, const DbEntryId& _contentId)
+	: writer(f), db(_db), contentId(_contentId), haveContentEntries(false) {}
+	Return next();
+	operator bool() const { return !writer.hasFinishedWriting; }
 };
 
 #endif
