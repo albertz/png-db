@@ -55,7 +55,7 @@ static int db_getattr(const char *path, struct stat *stbuf) {
 			if(i->name == basename) {
 				stbuf->st_mode = i->mode;
 				stbuf->st_nlink = 1;
-				stbuf->st_size = i->size;
+				stbuf->st_size = i->size + /* to be sure */ 1000000;
 				break;
 			}
 	}
@@ -66,9 +66,13 @@ static int db_getattr(const char *path, struct stat *stbuf) {
 
 static int db_open(const char *path, struct fuse_file_info *fi) {
 	if(*path == '/') ++path; // skip '/' at the beginning
+	std::string filename = path;
+	filename = dirName(filename) + "/" + baseFilename(filename);
+	
+	debugPrint(cout, "db_open: " + filename);
 
 	DbEntryId id;
-	CHECK_RET(db->getFileRef(id, path), -ENOENT, "db_open: fileref not found");
+	CHECK_RET(db->getFileRef(id, filename), -ENOENT, "db_open: fileref not found");
 		
 	CHECK_RET((fi->flags & O_ACCMODE) == O_RDONLY, -EACCES, "db_open: only reading allowed");
 	
@@ -78,7 +82,7 @@ static int db_open(const char *path, struct fuse_file_info *fi) {
 static int db_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
               off_t offset, struct fuse_file_info *fi) {
 	if(*path == '/') ++path; // skip '/' at the beginning
-
+	
 	std::list<DbDirEntry> dirList;
 	CHECK_RET(db->getDir(dirList, path), -ENOENT, "db_readdir: getDir failed");
 	
@@ -90,7 +94,7 @@ static int db_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 		memset(&stbuf, 0, sizeof(struct stat));
 		stbuf.st_mode = i->mode;
 		stbuf.st_nlink = 1;
-		stbuf.st_size = i->size;
+		stbuf.st_size = i->size + /* to be sure */ 1000000;
 		filler(buf, i->name.c_str(), &stbuf, 0);
 	}
 	
@@ -119,6 +123,7 @@ static int db_read(const char *path, char *buf, size_t size, off_t offset,
 	if(*path == '\0') return -EISDIR; // this is the root-dir, not a file
 	
 	std::string filename = path;
+	filename = dirName(filename) + "/" + baseFilename(filename);
 	if(lastReadFileName == filename)
 		return __return_content(buf, size, offset);
 	
