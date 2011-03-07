@@ -315,12 +315,14 @@ Return PngWriter::write() {
 	if(!hasAllChunks) return true; // just wait but don't fail
 
 	if(dataChunks.size() > 0) {
-		PngChunk chunk;
-		chunk.type = "IDAT";
-		chunk.data = dataChunks.front();
-		ASSERT( png_write_chunk(file, chunk) );
-		dataChunks.pop_front();
-		return true;
+		if((scanlines.size() == 0 && hasAllScanlines) || dataChunks.front().size() == PngDataChunkSize) {
+			PngChunk chunk;
+			chunk.type = "IDAT";
+			chunk.data = dataChunks.front();
+			ASSERT( png_write_chunk(file, chunk) );
+			dataChunks.pop_front();
+			return true;
+		}
 	}
 	
 	if(scanlines.size() > 0) {
