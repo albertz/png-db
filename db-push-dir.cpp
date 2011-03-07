@@ -49,6 +49,7 @@ int main(int argc, char** argv) {
 				break;
 			}
 		}
+		fclose(f);
 		
 		cout << dir.filename << ": "
 		<< (100.0f * float(db.stats.pushReuse) / (db.stats.pushNew + db.stats.pushReuse)) << "%, "
