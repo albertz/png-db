@@ -43,5 +43,12 @@ It comes with several tools. Some of them:
 - db-extract-file: Extracts a single PNG from the DB.
 - db-fuse: Simple FUSE interface to the DB. (Slow though because it is not very optimized!)
 
+Compilation
+===========
 
--Albert Zeyer, [www.az2000.de](http://www.az2000.de)
+Just run `./compile.sh`.
+
+For Mac: If you haven't MacFUSE installed, install it from here: <http://code.google.com/p/macfuse/>
+
+
+-Albert Zeyer, <http://www.az2000.de>
