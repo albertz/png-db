@@ -29,9 +29,9 @@ Return _main(const std::string& filename) {
 		return "cannot open " + extract_fn;
 	
 	if(!fileEntryId.empty()) {
-		//DbPngEntryWriter dbPngWriter(f, &db);
-		//while(dbPngWriter)
-		//	ASSERT( dbPngWriter.next() );
+		DbPngEntryReader dbPngReader(f, &db, fileEntryId);
+		while(dbPngReader)
+			ASSERT( dbPngReader.next() );
 	}
 	
 	cout << "wrote " << ftell(f) << " bytes" << endl;
