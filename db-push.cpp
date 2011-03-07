@@ -39,7 +39,7 @@ int main(int argc, char** argv) {
 	}
 	
 	db.pushToDir("", DbDirEntry::File(baseFilename(filename), ftell(f)));
-	db.setFileRef(dbPngWriter.contentId, baseFilename(filename));
+	db.setFileRef(dbPngWriter.contentId, "/" + baseFilename(filename));
 	fclose(f);
 	
 	cout << "content id: " << hexString(dbPngWriter.contentId) << endl;
