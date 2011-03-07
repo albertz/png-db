@@ -315,6 +315,8 @@ Return PngWriter::write() {
 	if(!hasAllChunks) return true; // just wait but don't fail
 
 	if(dataChunks.size() > 0) {
+		// We want to have the data chunk size = PngDataChunkSize.
+		// The only case where we cannot have this is at the very end.
 		if((scanlines.size() == 0 && hasAllScanlines) || dataChunks.front().size() == PngDataChunkSize) {
 			PngChunk chunk;
 			chunk.type = "IDAT";
