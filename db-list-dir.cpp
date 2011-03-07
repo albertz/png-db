@@ -48,12 +48,18 @@ static Return listDir(const std::string& path) {
 	return true;
 }
 
+static Return _main() {
+	DbDefBackend dbInst;
+	db = &dbInst;
+	ASSERT( db->init() );
+	ASSERT( listDir("") );
+	return true;
+}
+
 int main(int argc, char** argv) {
 	srandom(time(NULL));
 
-	DbDefBackend dbInst;
-	db = &dbInst;
-	Return r = listDir("");
+	Return r = _main();
 	if(!r) {
 		cerr << "error: " << r.errmsg << endl;
 		return 1;

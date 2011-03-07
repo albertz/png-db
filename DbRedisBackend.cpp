@@ -11,9 +11,13 @@
 #include <iostream>
 using namespace std;
 
-DbRedisBackend::DbRedisBackend(const std::string& _prefix, const std::string& host, int port) {
-	prefix = _prefix;
+Return DbRedisBackend::init() {
 	redis = redisConnect(host.c_str(), port);
+	if(redis == NULL)
+		return "failed to init Redis";
+	if(!(redis->flags & REDIS_CONNECTED))
+		return "failed to connect to Redis server";		
+	return true;
 }
 
 DbRedisBackend::~DbRedisBackend() {

@@ -12,6 +12,7 @@ struct DbFsBackend : DbIntf {
 	std::string baseDir;
 	
 	DbFsBackend(const std::string& d = "db") : baseDir(d) {}
+	Return init() { return true; }
 	Return push(/*out*/ DbEntryId& id, const DbEntry& entry);
 	Return get(/*out*/ DbEntry& entry, const DbEntryId& id);
 };

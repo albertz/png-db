@@ -15,21 +15,14 @@
 #include <iostream>
 using namespace std;
 
-int main(int argc, char** argv) {
-	if(argc <= 1) {
-		cerr << "please give me a dirname" << endl;
-		return 1;
-	}
-	
-	srandom(time(NULL));
+Return _main(const std::string& dirname) {
 	DbDefBackend db;
-
-	std::string dirname = argv[1];
+	ASSERT( db.init() );
+	
 	DirIter dir(dirname);
-	if(dir.dir == NULL) {
-		cerr << "error: cannot open directory " << dirname << endl;
-		return 1;
-	}
+	if(dir.dir == NULL)
+		return "cannot open directory " + dirname;
+	
 	for(; dir; dir.next()) {
 		if(dir.filename.size() <= 4) continue;
 		if(dir.filename.substr(dir.filename.size()-4) != ".png") continue;
@@ -58,7 +51,25 @@ int main(int argc, char** argv) {
 		<< db.stats.pushReuse << " / " << db.stats.pushNew
 		<< endl;
 	}
-		
+	
+	return true;
+}
+
+int main(int argc, char** argv) {
+	if(argc <= 1) {
+		cerr << "please give me a dirname" << endl;
+		return 1;
+	}
+	
+	srandom(time(NULL));
+
+	std::string dirname = argv[1];
+	Return r = _main(dirname);
+	if(!r) {
+		cerr << "error: " << r.errmsg << endl;
+		return 1;
+	}
+	
 	cout << "success" << endl;
 	return 0;
 }

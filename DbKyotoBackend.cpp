@@ -10,14 +10,18 @@
 
 #include <iostream>
 using namespace std;
+using namespace kyotocabinet;
 
-DbKyotoBackend::DbKyotoBackend(const std::string& _prefix) {
-	prefix = _prefix;
+DbKyotoBackend::~DbKyotoBackend() {
 }
 
-DbRedisBackend::~DbRedisBackend() {
+Return DbKyotoBackend::init() {
+	if(!db.open(filename, PolyDB::OWRITER | PolyDB::OCREATE))
+		return std::string() + "failed to open KyotoCabinet DB: " + db.error().name();
+	return true;
 }
 
+/*
 static Return __saveNewDbEntry(redisContext* redis, const std::string& prefix, DbEntryId& id, const std::string& content) {
 	unsigned short triesNum = (id.size() <= 4) ? (2 << id.size()) : 64;
 	for(unsigned short i = 0; i < triesNum; ++i) {
@@ -35,21 +39,17 @@ static Return __saveNewDbEntry(redisContext* redis, const std::string& prefix, D
 	id += (char)random();
 	return __saveNewDbEntry(redis, prefix, id, content);
 }
+ */
 
 Return DbKyotoBackend::push(/*out*/ DbEntryId& id, const DbEntry& entry) {
 	if(!entry.haveSha1())
 		return "DB push: entry SHA1 not calculated";
 	if(!entry.haveCompressed())
 		return "DB push: entry compression not calculated";
-	if(redis == NULL)
-		return "DB push: Redis connection not initialized";
-	if(!(redis->flags & REDIS_CONNECTED))
-		return "DB push: Redis not connected";		
 	
 	// search for existing entry
-	std::string sha1refkey = prefix + "sha1ref." + entry.sha1;
-	RedisReplyWrapper reply( redisCommand(redis, "SMEMBERS %b", &sha1refkey[0], sha1refkey.size()) );
-	ASSERT( reply );
+	std::string sha1refkey = "sha1ref." + entry.sha1;
+/*	RedisReplyWrapper reply( redisCommand(redis, "SMEMBERS %b", &sha1refkey[0], sha1refkey.size()) );
 	if(reply.reply->type == REDIS_REPLY_ARRAY)
 		for(int i = 0; i < reply.reply->elements; ++i) {
 			DbEntryId otherId = std::string(reply.reply->element[i]->str, reply.reply->element[i]->len);
@@ -63,77 +63,67 @@ Return DbKyotoBackend::push(/*out*/ DbEntryId& id, const DbEntry& entry) {
 				}
 			}
 		}
-	
+*/	
 	// write DB entry
 	id = "";
-	ASSERT( __saveNewDbEntry(redis, prefix, id, entry.compressed) );
+//	ASSERT( __saveNewDbEntry(redis, prefix, id, entry.compressed) );
 	
 	// create sha1 ref
-	reply = redisCommand(redis, "SADD %b %b", &sha1refkey[0], sha1refkey.size(), &id[0], id.size());
-	ASSERT( reply );
+//	reply = redisCommand(redis, "SADD %b %b", &sha1refkey[0], sha1refkey.size(), &id[0], id.size());
+//	ASSERT( reply );
 	
 	stats.pushNew++;
 	return true;
 }
 
 Return DbKyotoBackend::get(/*out*/ DbEntry& entry, const DbEntryId& id) {
-	if(redis == NULL)
-		return "DB get: Redis connection not initialized";
-	if(!(redis->flags & REDIS_CONNECTED))
-		return "DB get: Redis not connected";		
-
-	std::string key = prefix + "data." + id;
-	RedisReplyWrapper reply( redisCommand(redis, "GET %b", &key[0], key.size()) );
-	ASSERT(reply);
+	std::string key = "data." + id;
+/*	RedisReplyWrapper reply( redisCommand(redis, "GET %b", &key[0], key.size()) );
 	if(reply.reply->type == REDIS_REPLY_NIL)
 		return "DB get: entry not found";
 	if(reply.reply->type != REDIS_REPLY_STRING)
 		return "DB get: Redis: invalid GET reply";
-	entry.compressed = std::string(reply.reply->str, reply.reply->len);
+	entry.compressed = std::string(reply.reply->str, reply.reply->len); */
 	
-	ASSERT( entry.uncompress() );
+	//ASSERT( entry.uncompress() );
 	entry.calcSha1();
 	
 	return true;
 }
 
 Return DbKyotoBackend::pushToDir(const std::string& path, const DbDirEntry& dirEntry) {
-	std::string key = prefix + "fs." + path;
+	std::string key = "fs." + path;
 	std::string dirEntryRaw = dirEntry.serialized();
-	RedisReplyWrapper reply( redisCommand(redis, "SADD %b %b", &key[0], key.size(), &dirEntryRaw[0], dirEntryRaw.size()) );
-	ASSERT( reply );
+//	RedisReplyWrapper reply( redisCommand(redis, "SADD %b %b", &key[0], key.size(), &dirEntryRaw[0], dirEntryRaw.size()) );
 	return true;
 }
 
 Return DbKyotoBackend::getDir(/*out*/ std::list<DbDirEntry>& dirList, const std::string& path) {
-	std::string key = prefix + "fs." + path;
-	RedisReplyWrapper reply( redisCommand(redis, "SMEMBERS %b", &key[0], key.size()) );
-	ASSERT( reply );
+	std::string key = "fs." + path;
+/*	RedisReplyWrapper reply( redisCommand(redis, "SMEMBERS %b", &key[0], key.size()) );
 	if(reply.reply->type != REDIS_REPLY_ARRAY)
 		return "DB getDir: invalid SMEMBERS reply";
 	
 	for(int i = 0; i < reply.reply->elements; ++i) {
 		std::string dirEntryRaw(reply.reply->element[i]->str, reply.reply->element[i]->len);
 		dirList.push_back( DbDirEntry::FromSerialized(dirEntryRaw) );
-	}
+	}*/
 
 	return true;
 }
 
 Return DbKyotoBackend::setFileRef(/*can be empty*/ const DbEntryId& id, const std::string& path) {
-	std::string key = prefix + "fs." + path;
-	RedisReplyWrapper reply( redisCommand(redis, "SET %b %b", &key[0], key.size(), &id[0], id.size()) );
-	ASSERT( reply );
+	std::string key = "fs." + path;
+//	RedisReplyWrapper reply( redisCommand(redis, "SET %b %b", &key[0], key.size(), &id[0], id.size()) );
 	return true;
 }
 
 Return DbKyotoBackend::getFileRef(/*out (can be empty)*/ DbEntryId& id, const std::string& path) {
-	std::string key = prefix + "fs." + path;
-	RedisReplyWrapper reply( redisCommand(redis, "GET %b", &key[0], key.size()) );
-	ASSERT( reply );
+	std::string key = "fs." + path;
+/*	RedisReplyWrapper reply( redisCommand(redis, "GET %b", &key[0], key.size()) );
 	if(reply.reply->type != REDIS_REPLY_STRING)
 		return "DB getFileRef: invalid GET reply";	
-	id = std::string(reply.reply->str, reply.reply->len);
+	id = std::string(reply.reply->str, reply.reply->len); */
 	return true;
 }
 

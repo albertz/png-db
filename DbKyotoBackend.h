@@ -10,10 +10,12 @@
 #include "kyotocabinet/kcpolydb.h"
 
 struct DbKyotoBackend : DbIntf {
-	std::string prefix;
+	kyotocabinet::PolyDB db;
+	std::string filename;
 	
-	DbKyotoBackend(const std::string& prefix = "db.");
+	DbKyotoBackend(const std::string& dbfilename = "db.kch") : filename(dbfilename) {}
 	~DbKyotoBackend();
+	Return init();
 	Return push(/*out*/ DbEntryId& id, const DbEntry& entry);
 	Return get(/*out*/ DbEntry& entry, const DbEntryId& id);
 	Return pushToDir(const std::string& path, const DbDirEntry& dirEntry);
