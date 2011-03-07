@@ -8,6 +8,9 @@
 #include "Utils.h"
 #include <cstdio>
 
+#include <iostream>
+using namespace std;
+
 DbRedisBackend::DbRedisBackend(const std::string& _prefix, const std::string& host, int port) {
 	prefix = _prefix;
 	redis = redisConnect(host.c_str(), port);
@@ -46,8 +49,10 @@ static Return __saveNewDbEntry(redisContext* redis, const std::string& prefix, D
 		std::string key = prefix + "data." + hexString(newId);
 		RedisReplyWrapper reply( redisCommand(redis, "SETNX %s %b", key.c_str(), &content[0], content.size()) );
 		ASSERT( reply );
-		if(reply.reply->type == REDIS_REPLY_INTEGER && reply.reply->integer == 1)
+		if(reply.reply->type == REDIS_REPLY_INTEGER && reply.reply->integer == 1) {
+			id = newId;
 			return true;
+		}
 	}
 	
 	id += (char)random();
