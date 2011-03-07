@@ -67,6 +67,10 @@ for f in *.cpp; do
 	[[ ${BINS[(i)$f]} -gt ${#BINS} ]] && \
 		OBJS=($OBJS "$BUILDDIR/${f/.cpp/.o}")
 done
+for f in hiredis/*.c; do
+	srccompile "$f"
+	OBJS=($OBJS "$BUILDDIR/${f/.c/.o}")
+done
 
 mkdir -p bin
 for b in $BINS; do
