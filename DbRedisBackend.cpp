@@ -46,8 +46,8 @@ static Return __saveNewDbEntry(redisContext* redis, const std::string& prefix, D
 	for(unsigned short i = 0; i < triesNum; ++i) {
 		DbEntryId newId = id;
 		newId += (char)random();
-		std::string key = prefix + "data." + hexString(newId);
-		RedisReplyWrapper reply( redisCommand(redis, "SETNX %s %b", key.c_str(), &content[0], content.size()) );
+		std::string key = prefix + "data." + newId;
+		RedisReplyWrapper reply( redisCommand(redis, "SETNX %b %b", &key[0], key.size(), &content[0], content.size()) );
 		ASSERT( reply );
 		if(reply.reply->type == REDIS_REPLY_INTEGER && reply.reply->integer == 1) {
 			id = newId;
@@ -70,8 +70,8 @@ Return DbRedisBackend::push(/*out*/ DbEntryId& id, const DbEntry& entry) {
 		return "DB push: Redis not connected";		
 	
 	// search for existing entry
-	std::string sha1refkey = prefix + "sha1ref." + hexString(entry.sha1);
-	RedisReplyWrapper reply( redisCommand(redis, "SMEMBERS %s", sha1refkey.c_str()) );
+	std::string sha1refkey = prefix + "sha1ref." + entry.sha1;
+	RedisReplyWrapper reply( redisCommand(redis, "SMEMBERS %b", &sha1refkey[0], sha1keyref.size()) );
 	ASSERT( reply );
 	if(reply.reply->type == REDIS_REPLY_ARRAY)
 		for(int i = 0; i < reply.reply->elements; ++i) {
@@ -105,8 +105,8 @@ Return DbRedisBackend::get(/*out*/ DbEntry& entry, const DbEntryId& id) {
 	if(!(redis->flags & REDIS_CONNECTED))
 		return "DB get: Redis not connected";		
 
-	std::string key = prefix + "data." + hexString(id);
-	RedisReplyWrapper reply( redisCommand(redis, "GET %s", key.c_str()) );
+	std::string key = prefix + "data." + id;
+	RedisReplyWrapper reply( redisCommand(redis, "GET %b", &key[0], key.size()) );
 	ASSERT(reply);
 	if(reply.reply->type == REDIS_REPLY_NIL)
 		return "DB get: entry not found";
