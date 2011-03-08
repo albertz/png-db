@@ -7,8 +7,9 @@
 #include "DbDefBackend.h"
 #include "Utils.h"
 #include "DbPng.h"
+#include "Mutex.h"
+#include "SmartPointer.h"
 
-#include <pthread.h>
 #include <string>
 #include <errno.h>
 #include <fcntl.h>
@@ -102,28 +103,77 @@ static int db_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     return 0;
 }
 
-static pthread_mutex_t lastReadMutex;
-static std::string lastReadFileName;
-static std::string lastReadFileContent;
 
-struct ScopedLock : DontCopyTag {
-	pthread_mutex_t* mutex;
-	ScopedLock(pthread_mutex_t& m) : mutex(&m) { pthread_mutex_lock(mutex); }
-	~ScopedLock() { pthread_mutex_unlock(mutex); }
+struct FileContent : WriteCallbackIntf {
+	Mutex mutex;
+	DbEntryId fileEntryId;
+	std::string data;
+	bool finished;
+	DbPngEntryReader dbPngReader;
+	
+	FileContent(const std::string& _fileEntryId)
+	: fileEntryId(_fileEntryId), finished(false), dbPngReader(this, db, fileEntryId) {}
+	
+	Return write(const char* d, size_t s) {
+		// we already locked the mutex here
+		data.append(d, s);
+		return true;
+	}
+	
+	int read(char* buf, size_t size, off_t offset) {
+		ScopedLock lock(mutex);
+		
+		while(!finished && offset + size > data.size()) {
+			if(dbPngReader) {
+				CHECK_RET(dbPngReader.next(), -EIO, "db_read: reading failed");
+			} else
+				finished = true;
+		}
+		
+		if(offset >= data.size()) // Reading behind the content.
+			return 0;
+		
+		if (offset + size > data.size()) // Trim the read to the file size.
+			size = data.size() - offset;
+		
+		memcpy(buf, &data[offset], size); // Provide the content.	
+		return size;
+	}
 };
 
-static int __return_content(char *buf, size_t size, off_t offset) {
-	const std::string& content = lastReadFileContent;
+struct FileCache {
+	static const size_t NUM_ENTRIES = 20;
+	Mutex mutex;
+	typedef std::list< SmartPointer<FileContent> > CacheList;
+	CacheList cache;
 	
-	if(offset >= content.size()) // Reading behind the content.
-		return 0;
+	SmartPointer<FileContent> getContent(const DbEntryId& fileEntryId) {
+		ScopedLock lock(mutex);
+		for(CacheList::iterator i = cache.begin(); i != cache.end(); ++i) {
+			// i->fileEntryId can be accessed safely because we never write it again
+			if((*i)->fileEntryId == fileEntryId) {
+				// found it
+				// now push to front of cacheList
+				SmartPointer<FileContent> content = *i;
+				cache.erase(i);
+				cache.push_front(content);
+				return content;
+			}
+		}
 		
-    if (offset + size > content.size()) // Trim the read to the file size.
-        size = content.size() - offset;
+		// not found -> create new
+		SmartPointer<FileContent> content = new FileContent(fileEntryId);
+		cache.push_front(content);
+		// pop old entries
+		while(cache.size() > NUM_ENTRIES)
+			cache.pop_back();
+		return content;
+	}
 	
-	memcpy(buf, &content[offset], size); // Provide the content.	
-    return size;
-}
+	int read(const DbEntryId& fileEntryId, char* buf, size_t size, off_t offset) {
+		return getContent(fileEntryId)->read(buf, size, offset);
+	}
+};
 
 static int db_read(const char *path, char *buf, size_t size, off_t offset,
            struct fuse_file_info *fi) {
@@ -132,10 +182,6 @@ static int db_read(const char *path, char *buf, size_t size, off_t offset,
 	
 	std::string filename = path;
 	filename = dirName(filename) + "/" + baseFilename(filename);
-
-	ScopedLock lock(lastReadMutex);
-	if(lastReadFileName == filename)
-		return __return_content(buf, size, offset);
 	
 	DbEntryId fileEntryId;
 	CHECK_RET(db->getFileRef(fileEntryId, filename), -ENOENT, "db_read: getFileRef failed");
@@ -143,19 +189,8 @@ static int db_read(const char *path, char *buf, size_t size, off_t offset,
 	// fileEntryId.empty() is allowed and means we have an empty file
 	if(fileEntryId.empty()) return 0;
 
-	lastReadFileName = filename;
-	lastReadFileContent = "";
-	struct WriteCallback : WriteCallbackIntf {
-		Return write(const char* d, size_t s) {
-			lastReadFileContent += std::string(d, s);
-			return true;
-		}
-	} writer;
-	DbPngEntryReader dbPngReader(&writer, db, fileEntryId);
-	while(dbPngReader)
-		CHECK_RET(dbPngReader.next(), -EIO, "db_read: reading failed");
-	
-	return __return_content(buf, size, offset);
+	static FileCache fileCache;
+	return fileCache.read(fileEntryId, buf, size, offset);
 }
 
 int main(int argc, char **argv) {
@@ -167,9 +202,7 @@ int main(int argc, char **argv) {
 		cerr << "error: failed to init DB: " << r.errmsg << endl;
 		return 1;
 	}
-	
-	pthread_mutex_init(&lastReadMutex, NULL);
-	
+		
 	struct fuse_operations ops;
 	memset(&ops, 0, sizeof(ops));
 	ops.getattr = db_getattr;	/* To provide size, permissions, etc. */
