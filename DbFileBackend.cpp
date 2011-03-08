@@ -7,6 +7,9 @@
 #include "StringUtils.h"
 #include "Utils.h"
 #include <cstdio>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #include <iostream>
 using namespace std;
@@ -20,13 +23,15 @@ DbFileBackend::~DbFileBackend() {
 
 Return DbFileBackend::init() {
 	if(file != NULL) fclose(file);
-	file = fopen(filename.c_str(), readonly ? "rb" : "a+b");
-	if(file == NULL)
+
+	int fd = open(filename.c_str(), readonly ? O_RDONLY : O_RDWR);
+	if(fd < 0)
 		return "failed to open DB file " + filename;
-	if(!readonly) {
-		rewind(file);
-		cout << "XXX ftell: " << ftell(file) << endl;
-	}
+		
+	file = fdopen(fd, readonly ? "rb" : "w+b");
+	if(file == NULL)
+		return "failed to open DB file handle";
+
 	return true;
 }
 
