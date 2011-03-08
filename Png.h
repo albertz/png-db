@@ -62,7 +62,7 @@ struct PngInterlacedPos {
 	size_t scanlineWidth(uint32_t width);
 };
 
-struct PngReader {
+struct PngReader : DontCopyTag {
 	FILE* file;
 	z_stream stream;
 	PngHeader header;
@@ -79,7 +79,7 @@ struct PngReader {
 	Return read();
 };
 
-struct PngWriter {
+struct PngWriter : DontCopyTag {
 	WriteCallbackIntf* writer;
 	z_stream stream;
 	std::list<PngChunk> chunks;
