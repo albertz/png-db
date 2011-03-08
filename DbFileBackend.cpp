@@ -22,7 +22,10 @@ DbFileBackend::~DbFileBackend() {
 }
 
 Return DbFileBackend::init() {
-	if(file != NULL) fclose(file);
+	if(file != NULL) {
+		fclose(file);
+		file = NULL;
+	}
 
 	int fd = open(filename.c_str(), readonly ? O_RDONLY : O_RDWR);
 	if(fd < 0)
