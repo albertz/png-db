@@ -70,6 +70,9 @@ It would be based on connected chunks of data; i.e., in the image, it would mean
 But what I am doing is based on rectangular blocks in the image. So I am able to get much bigger
 chunks of data which is repetitive.
 
+Something like what is done in video compressions methods like H264: This might actually be a very good idea.
+And it should be possible to just add it now to my current method.
+
 Tools
 =====
 
