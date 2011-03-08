@@ -53,6 +53,23 @@ There are multiple DB backend implementations:
 - [Redis](http://redis.io/). Via [hiredis](https://github.com/antirez/hiredis). As everything is in memory, you are a bit limited.
 - [KyotoCabinet](http://fallabs.com/kyotocabinet/). (Currently the default.)
 
+Comparison with other compression methods / deduplicators
+=========================================================
+
+In the beginning, I thought about using some generic image library to be able to handle just any
+image type and then operate just on the raw data. This would even give me some slight better compression rate
+because now, I am operating on PNGs scanline serializations and there are 5 different ways (filters) in PNG
+to represent a scanline.
+
+However, because I am storing all the data as PNG raw data in the DB, the reconstruction of the PNG should
+be much faster. In the more generic case, I would have to recompress/reencode the PNG. Now I only have
+to (roughly) collect and glew the parts together and run the PNG zlib over it.
+
+Using a general deduplicator / compressor on the raw data (uncompressed PNG, TGA or BMP):
+It would be based on connected chunks of data; i.e., in the image, it would mean one or many following scanlines.
+But what I am doing is based on rectangular blocks in the image. So I am able to get much bigger
+chunks of data which is repetitive.
+
 Tools
 =====
 
