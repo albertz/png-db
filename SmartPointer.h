@@ -9,42 +9,14 @@
 
 #include <limits.h>
 #include <cassert>
-#include <SDL_mutex.h>
-
-#ifdef DEBUG
-#include <map>
-#include "Debug.h"
-#endif
-
-#include "Functors.h"
-#include "ThreadPool.h"
-
-template < typename _Type, typename _SpecificInitFunctor >
-class SmartPointer;
+#include "Mutex.h"
 
 // Default de-initialization action is to call operator delete, for each object type.
 template < typename _Type >
-void SmartPointer_ObjectDeinit( _Type * obj )
-{
+void SmartPointer_ObjectDeinit( _Type * obj ) {
 	delete obj;
 }
 
-// these forward-declaration are needed here
-struct SDL_Surface;
-class SoundSample;
-class CMap;
-class CGameScript;
-
-// Specialized de-init functions, for each simple struct-like type that has no destructor
-template <> void SmartPointer_ObjectDeinit<SDL_Surface> ( SDL_Surface * obj ); // Calls gfxFreeSurface(obj);
-template <> void SmartPointer_ObjectDeinit<SoundSample> ( SoundSample * obj ); // Calls FreeSoundSample(obj);
-template <> void SmartPointer_ObjectDeinit<CMap> ( CMap * obj ); // Requires to be defined elsewhere
-template <> void SmartPointer_ObjectDeinit<CGameScript> ( CGameScript * obj ); // Requires to be defined elsewhere
-
-#ifdef DEBUG
-extern SDL_mutex *SmartPointer_CollMutex;
-extern std::map< void *, SDL_mutex * > * SmartPointer_CollisionDetector;
-#endif
 
 /*
 	standard smartpointer based on simple refcounting
@@ -57,50 +29,23 @@ extern std::map< void *, SDL_mutex * > * SmartPointer_CollisionDetector;
 	about this yourself.
 */
 
-/*template < typename _Obj >
-class SmartObject;*/
 
-template < typename _Type, typename _SpecificInitFunctor = NopFunctor<void*> >
-class SmartPointer { //friend class SmartObject<_Type>;
+template < typename _Type >
+class SmartPointer {
 public:
 	typedef _Type value_type;
 private:
 	_Type* obj;
 	int* refCount;
-	SDL_mutex* mutex;
-
+	Mutex* mutex;
 
 	void init(_Type* newObj) {
-#ifdef DEBUG
-		if (SmartPointer_CollMutex == NULL)
-			SmartPointer_CollMutex = SDL_CreateMutex();
-#endif
-
 		if( newObj == NULL )
 			return;
 		if(!mutex) {
-			mutex = SDL_CreateMutex();
+			mutex = new Mutex();
 			obj = newObj;
-			refCount = new int;
-			*refCount = 1;
-			#ifdef DEBUG
-			SDL_LockMutex(SmartPointer_CollMutex);
-			if( SmartPointer_CollisionDetector == NULL )
-			{
-				hints << "SmartPointer collision detector initialized" << endl;
-				SmartPointer_CollisionDetector = new std::map< void *, SDL_mutex * > ();
-			}
-			if( SmartPointer_CollisionDetector->count(obj) != 0 ) // Should be faster than find() I think
-			{
-				errors << "ERROR! SmartPointer collision detected, old mutex " << (*SmartPointer_CollisionDetector)[obj] 
-						<< ", new ptr (" << this << " " << obj << " " << refCount << " " << mutex << " " << (refCount?*refCount:-99) << ") new " << newObj << endl;
-				SDL_UnlockMutex(SmartPointer_CollMutex);
-				assert(false); // TODO: maybe do smth like *(int *)NULL = 1; to generate coredump? Simple assert(false) won't help us a lot
-			}
-			else
-				SmartPointer_CollisionDetector->insert( std::make_pair( obj, mutex ) );
-			SDL_UnlockMutex(SmartPointer_CollMutex);
-			#endif
+			refCount = new int(1);
 		}
 	}
 
@@ -109,47 +54,12 @@ private:
 			lock();
 			(*refCount)--;
 			if(*refCount == 0) {
-				#ifdef DEBUG
-				SDL_LockMutex(SmartPointer_CollMutex);
-				if( !SmartPointer_CollisionDetector || SmartPointer_CollisionDetector->count(obj) == 0 )
-				{
-					errors << "ERROR! SmartPointer already deleted reference ("
-							<< this << " " << obj << " " << refCount << " " << mutex << " " << (refCount?*refCount:-99) << ")" << endl;
-					if(!SmartPointer_CollisionDetector)
-						errors << "SmartPointer_CollisionDetector is already uninitialised" << endl;
-					SDL_UnlockMutex(SmartPointer_CollMutex);
-					assert(false);
-				}
-				else
-				{
-					SmartPointer_CollisionDetector->erase(obj);
-					if( SmartPointer_CollisionDetector->empty() )
-					{
-						delete SmartPointer_CollisionDetector;
-						SmartPointer_CollisionDetector = NULL;
-						if (SmartPointer_CollMutex)
-						{
-							SDL_DestroyMutex(SmartPointer_CollMutex);
-							SmartPointer_CollMutex = NULL;
-						}
-
-						// WARNING: this is called at a very end for global objects and most other objects are already uninitialised.
-						// For me, even the internal string structure doesn't work anymore (I get a std::length_error) and thus we cannot use the logging system.
-						// TODO: Remove any global objects! We should not have any globals, at least not such complex globals.
-						#ifdef DEBUG						
-						printf("SmartPointer collision detector de-initialized, everything is freed now\n");
-						#endif
-					}
-				}
-				if( SmartPointer_CollMutex )
-					SDL_UnlockMutex(SmartPointer_CollMutex);
-				#endif
 				SmartPointer_ObjectDeinit( obj );
 				delete refCount; // safe, because there is no other ref anymore
 				obj = NULL;
 				refCount = NULL;
 				unlock();
-				SDL_DestroyMutex(mutex); // safe because there is no other ref anymore
+				delete mutex; // safe because there is no other ref anymore
 				mutex = NULL;
 		 	} else
 		 		unlock();
@@ -164,24 +74,12 @@ private:
 		(*refCount)++;
 	}
 
-	void lock() {
-		//printf("SmartPointer::lock    (%10p %10p %10p %10p %3i)\n", this, obj, refCount, mutex, refCount?*refCount:-99);
-		SDL_mutexP(mutex);
-	}
-	void unlock() {
-		//printf("SmartPointer::unlock  (%10p %10p %10p %10p %3i)\n", this, obj, refCount, mutex, refCount?*refCount:-99);
-		SDL_mutexV(mutex);
-	}
+	void lock() { mutex->lock(); }
+	void unlock() { mutex->unlock(); }
 
 public:
-	SmartPointer() : obj(NULL), refCount(NULL), mutex(NULL) {
-		//printf("SmartPointer::construc(%10p %10p %10p %10p %3i)\n", this, obj, refCount, mutex, refCount?*refCount:-99);
-		_SpecificInitFunctor()(this);
-	}
-	~SmartPointer() {
-		//printf("SmartPointer::destruct(%10p %10p %10p %10p %3i)\n", this, obj, refCount, mutex, refCount?*refCount:-99);
-		reset();
-	}
+	SmartPointer() : obj(NULL), refCount(NULL), mutex(NULL) {}
+	~SmartPointer() { reset(); }
 
 	// Default copy constructor and operator=
 	// If you specify any template<> params here these funcs will be silently ignored by compiler
@@ -204,7 +102,6 @@ public:
 	// In short: SmartPointer ptr(SomeObj); SmartPointer ptr1( ptr.get() ); // It's wrong, don't do that.
 	SmartPointer(_Type* pt): obj(NULL), refCount(NULL), mutex(NULL) { operator=(pt); }
 	SmartPointer& operator=(_Type* pt) {
-		//printf("SmartPointer::op=Type (%10p %10p %10p %10p %3i)\n", this, obj, refCount, mutex, refCount?*refCount:-99);
 		if(obj == pt) return *this; // ignore this case
 		reset();
 		init(pt);
@@ -246,20 +143,6 @@ public:
 	}
 
 };
-
-/*
-template< typename _Obj>
-class SmartObject : public SmartPointer< SmartObject<_Obj> > {
-public:
-	typedef SmartPointer< SmartObject<_Obj> > SmartPtrType;
-	SmartObject() { SmartPtrType :: operator =( this ); }
-	virtual ~SmartObject() {  }
-private:
-	// overwrite to disable this op=
-	SmartPtrType& operator=(const SmartPtrType& pt) { assert(false); }
-	
-};
-*/
 
 #endif
 
