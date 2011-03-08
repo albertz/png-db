@@ -35,6 +35,15 @@ static DbIntf* db = NULL;
 #define CHECK_RET(x, err_ret, err_msg) \
 	{ Return ___r = (x); if(!___r) { debugPrint(cerr, err_msg + ": " + ___r.errmsg); return err_ret; } }
 
+// Currently, the size we return here is not exactly correct (it is the size
+// of the files when we pushed them to the DB but they will likely be somewhat
+// different when you get them out).
+// If this size is smaller then what we would return here, we get into trouble
+// that many readers would skip the rest of the data and thus the PNG seems
+// incomplete.
+// So just add some random value to make sure we return a size which is bigger
+// than the actual file we would return here.
+#define SAFETY_ADDED_SIZE 1000000
 
 static int db_getattr(const char *path, struct stat *stbuf) {
     memset(stbuf, 0, sizeof(struct stat));
@@ -57,7 +66,7 @@ static int db_getattr(const char *path, struct stat *stbuf) {
 			if(i->name == basename) {
 				stbuf->st_mode = i->mode;
 				stbuf->st_nlink = 1;
-				stbuf->st_size = i->size + /* to be sure */ 1000000;
+				stbuf->st_size = i->size + /* to be sure */ SAFETY_ADDED_SIZE;
 				break;
 			}
 	}
@@ -96,7 +105,7 @@ static int db_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 		memset(&stbuf, 0, sizeof(struct stat));
 		stbuf.st_mode = i->mode;
 		stbuf.st_nlink = 1;
-		stbuf.st_size = i->size + /* to be sure */ 1000000;
+		stbuf.st_size = i->size + /* to be sure */ SAFETY_ADDED_SIZE;
 		filler(buf, i->name.c_str(), &stbuf, 0);
 	}
 	
