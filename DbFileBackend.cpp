@@ -23,7 +23,7 @@ DbFileBackend::~DbFileBackend() {
 	}
 }
 
-static const char DbFile_Signature[] = {'A','Z','P','N','G','D','B',13,10,27};
+static const char DbFile_Signature[] = {137,'A','Z','P','N','G','D','B',13,10,26,10};
 
 static Return __db_fwrite(DbFileBackend& db, const char* d, size_t s) {
 	ASSERT( fwrite_bytes(db.file, d, s) );
