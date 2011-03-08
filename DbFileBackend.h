@@ -10,6 +10,7 @@
 
 struct DbFileBackend : DbIntf {
 	FILE* file;
+	size_t fileSize;
 	std::string filename;
 	bool readonly;
 	

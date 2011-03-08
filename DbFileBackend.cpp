@@ -6,10 +6,12 @@
 #include "DbFileBackend.h"
 #include "StringUtils.h"
 #include "Utils.h"
+#include "FileUtils.h"
 #include <cstdio>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <stdint.h>
 
 #include <iostream>
 using namespace std;
@@ -21,13 +23,28 @@ DbFileBackend::~DbFileBackend() {
 	}
 }
 
+static const char DbFile_Signature[] = {'A','Z','P','N','G','D','B',13,10,27};
+
+static Return __db_fwrite(DbFileBackend& db, const char* d, size_t s) {
+	ASSERT( fwrite_bytes(db.file, d, s) );
+	long curPos = ftell(db.file);
+	if(curPos < 0)
+		return "error on telling file stream possition / non-seekable stream?";
+	db.fileSize = std::max((size_t)curPos, db.fileSize);
+	return true;
+}
+
+static Return __db_fwrite(DbFileBackend& db, const std::string& d) {
+	return __db_fwrite(db, &d[0], d.size());
+}
+
 Return DbFileBackend::init() {
 	if(file != NULL) {
 		fclose(file);
 		file = NULL;
 	}
-
-	int fd = open(filename.c_str(), readonly ? O_RDONLY : O_RDWR);
+	
+	int fd = open(filename.c_str(), readonly ? O_RDONLY : (O_RDWR|O_CREAT), 0644);
 	if(fd < 0)
 		return "failed to open DB file " + filename;
 		
@@ -35,10 +52,33 @@ Return DbFileBackend::init() {
 	if(file == NULL)
 		return "failed to open DB file handle";
 
+	fseek(file, 0, SEEK_END);
+	fileSize = ftell(file);
+	fseek(file, 0, SEEK_SET);
+	
+	if(fileSize == 0) {
+		// init new file
+		ASSERT( __db_fwrite(*this, DbFile_Signature, sizeof(DbFile_Signature)) );
+	}
+	else if(fileSize < sizeof(DbFile_Signature))
+		return "DB file even too small for the signature";
+	else {
+		char tmp[sizeof(DbFile_Signature)];
+		ASSERT( fread_bytes(file, tmp, sizeof(tmp)) );
+		if(memcpy(tmp, DbFile_Signature, sizeof(tmp)) != 0)
+			return "DB file signature wrong";
+	}
+	
 	return true;
 }
 
+// creates or append to an entry
 static Return __db_append(DbFileBackend& db, const std::string& key, const std::string& value) {
+	// TODO ...
+	return false;
+}
+
+static Return __db_set(DbFileBackend& db, const std::string& key, const std::string& value) {
 	// TODO ...
 	return false;
 }
@@ -50,11 +90,6 @@ static Return __db_get(DbFileBackend& db, const std::string& key, /*out*/ std::s
 
 // adds. if it exists, it fails
 static Return __db_add(DbFileBackend& db, const std::string& key, const std::string& value) {
-	// TODO ...
-	return false;
-}
-
-static Return __db_set(DbFileBackend& db, const std::string& key, const std::string& value) {
 	// TODO ...
 	return false;
 }
