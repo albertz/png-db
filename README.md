@@ -7,6 +7,26 @@ The idea is to split PNG images into many blocks and have each block stored in a
 If there are several equal blocks, it is only stored once.
 Via a hash table, the lookup for such blocks is made fast.
 
+Use case
+========
+
+I am collecting screenshots (for several reasons; one is to play around with machine learning / computer vision;
+one example is here: <https://github.com/albertz/screenshooting>). A lot of them. :)
+
+Right now, I have about 88k screenshots with about 77GB. And as many of them have a lot of repetitive areas
+(on some days, I were making a screenshot every 10 seconds, even when not using the computer at all,
+so the only changing part was the time display), I didn't wanted to waste so much space on so much repetitive data.
+
+With this PNG DB, I have a compression rate of about 400-500%
+(for the first 1k screenshots or so; probably the rate will even be higher for all of them).
+
+This example with the screenshots is probably an extreme case (where this applies extremely well).
+But I guess in many other cases where you are collecting a huge amount of PNG images
+(with computer-generated content; real-world images would not work that well), you can safe some space by it.
+
+And if this gets optimized as far as possible, it may be even faster than normal filesystem access
+(because of less disk IO).
+
 Technical details
 =================
 
