@@ -140,11 +140,13 @@ struct DbFile_TreeChunk {
 			uint16_t keysize = offsets[i];
 			if(i > 0) {
 				if(offsets[i] < offsets[i-1])
-					return "TreeChunk key offset data inconsistent";
+					return "TreeChunk key offset data inconsistent (offsets not in order)";
 				keysize -= offsets[i-1];
 			}
 			entries[i].key = data.substr(offset, keysize);
 			offset += keysize;
+			if(offset > data.size())
+				return "TreeChunk key offset data inconsistent (go beyond the scope)";
 			if(entries[i].key.empty())
 				entries[i].type = Entry::ET_None;
 		}
