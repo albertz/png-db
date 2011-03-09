@@ -8,14 +8,18 @@
 
 #include "Db.h"
 
+struct DbFile_TreeChunk;
+
 struct DbFileBackend : DbIntf {
 	FILE* file;
+	DbFile_TreeChunk* rootChunk;
 	size_t fileSize;
 	std::string filename;
 	bool readonly;
 	
 	DbFileBackend(const std::string& dbfilename = "db.pngdb", bool ro = false) : filename(dbfilename), readonly(ro) {}
-	~DbFileBackend();
+	~DbFileBackend() { reset(); }
+	void reset();
 	Return setReadOnly(bool ro) { readonly = ro; return true; }
 	Return init();
 	Return push(/*out*/ DbEntryId& id, const DbEntry& entry);

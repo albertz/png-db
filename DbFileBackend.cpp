@@ -7,6 +7,7 @@
 #include "StringUtils.h"
 #include "Utils.h"
 #include "FileUtils.h"
+#include "Crc.h"
 #include <cstdio>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -16,21 +17,25 @@
 #include <iostream>
 using namespace std;
 
-DbFileBackend::~DbFileBackend() {
-	if(file != NULL) {
-		fclose(file);
-		file = NULL;
-	}
+static Return __db_ftell(DbFileBackend& db, /*out*/ size_t& pos) {
+	long p = ftell(db.file);
+	if(p < 0)
+		return "error on telling file stream possition / non-seekable stream?";
+	pos = p;
+	return true;
 }
 
-static const char DbFile_Signature[] = {137,'A','Z','P','N','G','D','B',13,10,26,10};
+static Return __db_fseek(DbFileBackend& db, size_t pos) {
+	if(fseek(db.file, pos, SEEK_SET) < 0)
+		return "error seeking in file stream";
+	return true;
+}
 
 static Return __db_fwrite(DbFileBackend& db, const char* d, size_t s) {
 	ASSERT( fwrite_bytes(db.file, d, s) );
-	long curPos = ftell(db.file);
-	if(curPos < 0)
-		return "error on telling file stream possition / non-seekable stream?";
-	db.fileSize = std::max((size_t)curPos, db.fileSize);
+	size_t curPos = 0;
+	ASSERT( __db_ftell(db, curPos) );
+	db.fileSize = std::max(curPos, db.fileSize);
 	return true;
 }
 
@@ -38,27 +43,187 @@ static Return __db_fwrite(DbFileBackend& db, const std::string& d) {
 	return __db_fwrite(db, &d[0], d.size());
 }
 
-Return DbFileBackend::init() {
+#define ChunkType_Tree 1
+#define ChunkType_Value 2
+
+struct DbFile_TreeChunk {
+	DbFile_TreeChunk() : selfOffset(0) {}
+	size_t selfOffset;
+	
+	static const short NUM_ENTRIES = 8;
+	struct Entry {
+		std::string key;
+		enum { ET_None=0, ET_Subtree=1, ET_Value=2 } type;
+		uint64_t ref;
+		Entry() : type(ET_None), ref(0) {}
+		bool operator<(const Entry& o) const { return key < o.key; }
+	};
+	Entry entries[NUM_ENTRIES];
+	
+	uint8_t typesBitfield() {
+		uint8_t types = 0;		
+		for(int i = 0; i < NUM_ENTRIES; ++i)
+			if(entries[i].type == Entry::ET_Value)
+				types |= uint8_t(1) << i;
+		return types;
+	}
+	
+	void setFromTypesBitfield(uint8_t types) {
+		for(int i = 0; i < NUM_ENTRIES; ++i)
+			if(entries[i].type == Entry::ET_Value) {
+				if(types & (uint8_t(1) << i))
+					entries[i].type = Entry::ET_Value;
+				else
+					entries[i].type = Entry::ET_Subtree;
+			}
+	}
+	
+	Return write(DbFileBackend& db) {
+		ASSERT( __db_fseek(db, selfOffset) );
+		std::string data;
+		
+		data += rawString<uint8_t>(typesBitfield());
+		for(short i = 0; i < NUM_ENTRIES; ++i)
+			data += rawString<uint64_t>(entries[i].ref);
+
+		uint16_t offset = 0;
+		for(short i = 0; i < NUM_ENTRIES; ++i) {
+			if(entries[i].key.size() >= 255) return "entry key size too big";
+			offset += entries[i].key.size();
+			data += rawString<uint16_t>(offset);
+		}
+		
+		for(short i = 0; i < NUM_ENTRIES; ++i)
+			data += entries[i].key;
+
+		data += rawString<uint32_t>(calc_crc(data));
+		data = rawString<uint32_t>(data.size() - sizeof(uint32_t)) + data;
+		
+		return __db_fwrite(db, data);
+	}
+	
+	Return read(DbFileBackend& db) {
+		ASSERT( __db_ftell(db, selfOffset) );
+
+		size_t len = 0;
+		ASSERT( fread_bigendian<uint32_t>(db.file, len) );
+		if(len < sizeof(uint8_t) + NUM_ENTRIES*(sizeof(uint64_t) + sizeof(uint16_t)))
+			return "TreeChunk data too small";
+		
+		std::string data('\0', len);
+		ASSERT( fread_bytes(db.file, &data[0], data.size()) );
+		
+		uint32_t crc = 0;
+		ASSERT( fread_bigendian<uint32_t>(db.file, crc) );
+		
+		if(crc != calc_crc(data))
+			return "CRC missmatch on TreeChunk read";
+		
+		uint32_t offset = 0;
+		setFromTypesBitfield(valueFromRaw<uint8_t>(&data[offset]));
+		offset += sizeof(uint8_t);
+
+		for(short i = 0; i < NUM_ENTRIES; ++i) {
+			entries[i].ref = valueFromRaw<uint64_t>(&data[offset]);
+			offset += sizeof(uint64_t);
+			if(entries[i].ref == 0)
+				entries[i].type = Entry::ET_None;
+		}
+		
+		uint16_t offsets[NUM_ENTRIES];
+		for(short i = 0; i < NUM_ENTRIES; ++i) {
+			offsets[i] = valueFromRaw<uint16_t>(&data[offset]);
+			offset += sizeof(uint16_t);
+		}
+		
+		for(short i = 0; i < NUM_ENTRIES; ++i) {
+			uint16_t keysize = offsets[i];
+			if(i > 0) {
+				if(offsets[i] < offsets[i-1])
+					return "TreeChunk key offset data inconsistent";
+				keysize -= offsets[i-1];
+			}
+			entries[i].key = data.substr(offset, keysize);
+			offset += keysize;
+			if(entries[i].key.empty())
+				entries[i].type = Entry::ET_None;
+		}
+		
+		return true;
+	}
+};
+
+struct DbFile_ValueChunk {
+	DbFile_ValueChunk() : selfOffset(0) {}
+	size_t selfOffset;
+	std::string data;
+	
+	Return write(DbFileBackend& db) {
+		ASSERT( __db_fseek(db, selfOffset) );
+		ASSERT( __db_fwrite(db, rawString<uint32_t>(data.size())) );
+		ASSERT( __db_fwrite(db, data) );
+		ASSERT( __db_fwrite(db, rawString<uint32_t>(calc_crc(data))) );
+		return true;
+	}
+	
+	Return read(DbFileBackend& db) {
+		ASSERT( __db_ftell(db, selfOffset) );
+
+		size_t len = 0;
+		ASSERT( fread_bigendian<uint32_t>(db.file, len) );
+		
+		data = std::string('\0', len);
+		ASSERT( fread_bytes(db.file, &data[0], data.size()) );
+		
+		uint32_t crc = 0;
+		ASSERT( fread_bigendian<uint32_t>(db.file, crc) );
+		
+		if(crc != calc_crc(data))
+			return "CRC missmatch on ValueChunk read";
+		
+		return true;
+	}
+};
+
+static const char DbFile_Signature[] = {137,'A','Z','P','N','G','D','B',13,10,26,10};
+#define TreeRootOffset sizeof(DbFile_Signature)
+
+void DbFileBackend::reset() {
 	if(file != NULL) {
 		fclose(file);
 		file = NULL;
 	}
+	
+	if(rootChunk != NULL) {
+		delete rootChunk;
+		rootChunk = NULL;
+	}
+}
+
+Return DbFileBackend::init() {
+	reset();
 	
 	int fd = open(filename.c_str(), readonly ? O_RDONLY : (O_RDWR|O_CREAT), 0644);
 	if(fd < 0)
 		return "failed to open DB file " + filename;
 		
 	file = fdopen(fd, readonly ? "rb" : "w+b");
-	if(file == NULL)
+	if(file == NULL) {
+		close(fd);
 		return "failed to open DB file handle";
-
+	}
+	
 	fseek(file, 0, SEEK_END);
 	fileSize = ftell(file);
 	fseek(file, 0, SEEK_SET);
+
+	rootChunk = new DbFile_TreeChunk();
 	
 	if(fileSize == 0) {
 		// init new file
 		ASSERT( __db_fwrite(*this, DbFile_Signature, sizeof(DbFile_Signature)) );
+		ASSERT( __db_ftell(*this, rootChunk->selfOffset) );
+		ASSERT( rootChunk->write(*this) );
 	}
 	else if(fileSize < sizeof(DbFile_Signature))
 		return "DB file even too small for the signature";
@@ -67,6 +232,8 @@ Return DbFileBackend::init() {
 		ASSERT( fread_bytes(file, tmp, sizeof(tmp)) );
 		if(memcpy(tmp, DbFile_Signature, sizeof(tmp)) != 0)
 			return "DB file signature wrong";
+		
+		ASSERT_EXT( rootChunk->read(*this), "error reading root chunk" );
 	}
 	
 	return true;
