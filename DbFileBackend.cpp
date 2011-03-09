@@ -46,6 +46,43 @@ static Return __db_fwrite(DbFileBackend& db, const std::string& d) {
 #define ChunkType_Tree 1
 #define ChunkType_Value 2
 
+struct DbFile_ValueChunk {
+	DbFile_ValueChunk() : selfOffset(0) {}
+	size_t selfOffset;
+	std::string data;
+	
+	Return write(DbFileBackend& db) {
+		ASSERT( __db_fseek(db, selfOffset) );
+		ASSERT( __db_fwrite(db, rawString<uint8_t>(ChunkType_Value)) );
+		ASSERT( __db_fwrite(db, rawString<uint32_t>(data.size())) );
+		ASSERT( __db_fwrite(db, data) );
+		ASSERT( __db_fwrite(db, rawString<uint32_t>(calc_crc(data))) );
+		return true;
+	}
+	
+	Return read(DbFileBackend& db) {
+		ASSERT( __db_ftell(db, selfOffset) );
+		
+		uint8_t chunkType = 0;
+		ASSERT( fread_bigendian<uint8_t>(db.file, chunkType) );
+		if(chunkType != ChunkType_Value) return "ValueChunk read: chunk type invalid";
+		
+		size_t len = 0;
+		ASSERT( fread_bigendian<uint32_t>(db.file, len) );
+		
+		data = std::string('\0', len);
+		ASSERT( fread_bytes(db.file, &data[0], data.size()) );
+		
+		uint32_t crc = 0;
+		ASSERT( fread_bigendian<uint32_t>(db.file, crc) );
+		
+		if(crc != calc_crc(data))
+			return "CRC missmatch on ValueChunk read";
+		
+		return true;
+	}
+};
+
 struct DbFile_TreeChunk {
 	DbFile_TreeChunk() : selfOffset(0) {}
 	size_t selfOffset;
@@ -59,6 +96,10 @@ struct DbFile_TreeChunk {
 		bool operator<(const Entry& o) const { return key < o.key; }
 	};
 	Entry entries[NUM_ENTRIES];
+	
+	Return getValue(const std::string& key, /*out*/DbFile_ValueChunk& value, bool createIfNotExist = true) {
+		
+	}
 	
 	uint8_t typesBitfield() {
 		uint8_t types = 0;		
@@ -80,8 +121,9 @@ struct DbFile_TreeChunk {
 	
 	Return write(DbFileBackend& db) {
 		ASSERT( __db_fseek(db, selfOffset) );
-		std::string data;
-		
+		ASSERT( __db_fwrite(db, rawString<uint8_t>(ChunkType_Value)) );
+
+		std::string data;		
 		data += rawString<uint8_t>(typesBitfield());
 		for(short i = 0; i < NUM_ENTRIES; ++i)
 			data += rawString<uint64_t>(entries[i].ref);
@@ -105,6 +147,10 @@ struct DbFile_TreeChunk {
 	Return read(DbFileBackend& db) {
 		ASSERT( __db_ftell(db, selfOffset) );
 
+		uint8_t chunkType = 0;
+		ASSERT( fread_bigendian<uint8_t>(db.file, chunkType) );
+		if(chunkType != ChunkType_Tree) return "TreeChunk read: chunk type invalid";
+		
 		size_t len = 0;
 		ASSERT( fread_bigendian<uint32_t>(db.file, len) );
 		if(len < sizeof(uint8_t) + NUM_ENTRIES*(sizeof(uint64_t) + sizeof(uint16_t)))
@@ -149,39 +195,11 @@ struct DbFile_TreeChunk {
 				return "TreeChunk key offset data inconsistent (go beyond the scope)";
 			if(entries[i].key.empty())
 				entries[i].type = Entry::ET_None;
+			if(i > 0 && entries[i].type != Entry::ET_None) {
+				if(!(entries[i-1] < entries[i]))
+					return "TreeChunk keys inconsistent (not in order)";
+			}
 		}
-		
-		return true;
-	}
-};
-
-struct DbFile_ValueChunk {
-	DbFile_ValueChunk() : selfOffset(0) {}
-	size_t selfOffset;
-	std::string data;
-	
-	Return write(DbFileBackend& db) {
-		ASSERT( __db_fseek(db, selfOffset) );
-		ASSERT( __db_fwrite(db, rawString<uint32_t>(data.size())) );
-		ASSERT( __db_fwrite(db, data) );
-		ASSERT( __db_fwrite(db, rawString<uint32_t>(calc_crc(data))) );
-		return true;
-	}
-	
-	Return read(DbFileBackend& db) {
-		ASSERT( __db_ftell(db, selfOffset) );
-
-		size_t len = 0;
-		ASSERT( fread_bigendian<uint32_t>(db.file, len) );
-		
-		data = std::string('\0', len);
-		ASSERT( fread_bytes(db.file, &data[0], data.size()) );
-		
-		uint32_t crc = 0;
-		ASSERT( fread_bigendian<uint32_t>(db.file, crc) );
-		
-		if(crc != calc_crc(data))
-			return "CRC missmatch on ValueChunk read";
 		
 		return true;
 	}
@@ -243,22 +261,26 @@ Return DbFileBackend::init() {
 
 // creates or append to an entry
 static Return __db_append(DbFileBackend& db, const std::string& key, const std::string& value) {
+	if(db.rootChunk == NULL) return "db append: db not initialized";
 	// TODO ...
 	return false;
 }
 
 static Return __db_set(DbFileBackend& db, const std::string& key, const std::string& value) {
+	if(db.rootChunk == NULL) return "db set: db not initialized";
 	// TODO ...
 	return false;
 }
 
 static Return __db_get(DbFileBackend& db, const std::string& key, /*out*/ std::string& value) {
+	if(db.rootChunk == NULL) return "db get: db not initialized";
 	// TODO ...
 	return false;
 }
 
 // adds. if it exists, it fails
 static Return __db_add(DbFileBackend& db, const std::string& key, const std::string& value) {
+	if(db.rootChunk == NULL) return "db add: db not initialized";
 	// TODO ...
 	return false;
 }
