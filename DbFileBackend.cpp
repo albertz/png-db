@@ -176,47 +176,52 @@ struct DbFile_ValueChunk {
 
 struct DbFile_TreeChunk {
 	size_t selfOffset;
-	DbFile_TreeChunk* parent;
 	uint64_t valueRef;
-	uint64_t subtreeRefs[256];
+	uint64_t subtreeRefs[4];
 	
 	DbFile_TreeChunk() {
 		selfOffset = 0;
-		parent = NULL;
 		valueRef = 0;
 		memset(subtreeRefs, 0, sizeof(subtreeRefs));		
 	}
 	
 	Return getValue(DbFileBackend& db, const std::string& key, /*out*/DbFile_ValueChunk& value,
 					bool createIfNotExist = true, bool mustCreateNew = false) {
-		if(key == "") {
-			if(valueRef != 0) {
-				if(mustCreateNew) return "entry does already exist";
-				ASSERT( value.read(db, valueRef) );
-				return true;
+		DbFile_TreeChunk* curTree = this;
+		DbFile_TreeChunk subtree;
+		
+		uint64_t bitOffset = 0;
+		while(bitOffset < key.size()*8) {
+			uint8_t next = key[bitOffset / 8];
+			next >>= bitOffset % 8;
+			next &= 3; // first 2 relevant bytes
+			bitOffset += 2;
+			
+			if(curTree->subtreeRefs[next] != 0) {
+				ASSERT( subtree.read(db, curTree->subtreeRefs[next]) );
+				curTree = &subtree;
+				continue;
 			}
-			if(!createIfNotExist) return "entry not found: not set";
-			valueRef = value.selfOffset = db.fileSize;
-			ASSERT( write(db) );
+			
+			if(!createIfNotExist) return "entry not found: subtree does not exist";
+			
+			DbFile_TreeChunk newSubtree;
+			curTree->subtreeRefs[next] = newSubtree.selfOffset = db.fileSize;
+			ASSERT( newSubtree.write(db) );
+			ASSERT( curTree->write(db) );
+			subtree = newSubtree;
+			curTree = &subtree;
+		}
+		
+		if(curTree->valueRef != 0) {
+			if(mustCreateNew) return "entry does already exist";
+			ASSERT( value.read(db, curTree->valueRef) );
 			return true;
 		}
-		
-		uint8_t next = (uint8_t)key[0];
-		if(subtreeRefs[next] != 0) {
-			DbFile_TreeChunk subtree;
-			subtree.parent = this;
-			ASSERT( subtree.read(db, subtreeRefs[next]) );
-			return subtree.getValue(db, key.substr(1), value, createIfNotExist, mustCreateNew);
-		}
-		
-		if(!createIfNotExist) return "entry not found: subtree does not exist";
-		
-		DbFile_TreeChunk subtree;
-		subtree.parent = this;
-		subtreeRefs[next] = subtree.selfOffset = db.fileSize;
-		ASSERT( subtree.write(db) );
-		ASSERT( write(db) );
-		return subtree.getValue(db, key.substr(1), value, createIfNotExist, mustCreateNew);
+		if(!createIfNotExist) return "entry not found: not set";
+		curTree->valueRef = value.selfOffset = db.fileSize;
+		ASSERT( curTree->write(db) );
+		return true;
 	}
 		
 	Return write(DbFileBackend& db) {
@@ -225,7 +230,7 @@ struct DbFile_TreeChunk {
 
 		std::string data;		
 		data += rawString<uint64_t>(valueRef);
-		for(short i = 0; i < 256; ++i)
+		for(short i = 0; i < sizeof(subtreeRefs)/sizeof(subtreeRefs[0]); ++i)
 			data += rawString<uint64_t>(subtreeRefs[i]);
 		
 		data += rawString<uint32_t>(calc_crc(data));
@@ -244,7 +249,7 @@ struct DbFile_TreeChunk {
 		
 		size_t len = 0;
 		ASSERT( fread_bigendian<uint32_t>(db.file, len) );
-		if(len != sizeof(uint64_t) * (/*valueRef*/1 + /*subtreeRefs*/256))
+		if(len != sizeof(valueRef) + sizeof(subtreeRefs))
 			return "TreeChunk data size missmatch";
 		
 		std::string data(len, '\0');
@@ -260,7 +265,7 @@ struct DbFile_TreeChunk {
 		valueRef = valueFromRaw<uint64_t>(&data[offset]);
 		offset += sizeof(uint64_t);
 
-		for(short i = 0; i < 256; ++i) {
+		for(short i = 0; i < sizeof(subtreeRefs)/sizeof(subtreeRefs[0]); ++i) {
 			subtreeRefs[i] = valueFromRaw<uint64_t>(&data[offset]);
 			offset += sizeof(uint64_t);
 		}
