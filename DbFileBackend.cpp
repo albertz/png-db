@@ -250,6 +250,10 @@ struct DbFile_TreeChunk {
 	}
 	
 	short __bestKeySize(const std::string& keyPart) {
+		// NOTE: We cannot make some key more short. We cannot make some key longer.
+		// So the any way to stay safe is to use len=1.
+		return 1;
+		
 		short keySize = 1;
 		if(countNonEmptyEntries() <= 2) keySize = 4;
 		else if(countNonEmptyEntries() <= 4) keySize = 2;
