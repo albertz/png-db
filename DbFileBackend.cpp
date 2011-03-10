@@ -318,7 +318,7 @@ struct DbFile_TreeChunk {
 	
 	Return write(DbFileBackend& db) {
 		ASSERT( __db_fseek(db, selfOffset) );
-		ASSERT( __db_fwrite(db, rawString<uint8_t>(ChunkType_Value)) );
+		ASSERT( __db_fwrite(db, rawString<uint8_t>(ChunkType_Tree)) );
 
 		std::string data;		
 		data += rawString<uint8_t>(typesBitfield());
@@ -326,7 +326,7 @@ struct DbFile_TreeChunk {
 			data += rawString<uint64_t>(entries[i].ref);
 		
 		for(short i = 0; i < NUM_ENTRIES; ++i) {
-			if(entries[i].keyPart.size() >= Entry::KEYSIZELIMIT) return "entry keyPart size too big";
+			if(entries[i].keyPart.size() > Entry::KEYSIZELIMIT) return "entry keyPart size too big";
 			data += rawString<uint8_t>(entries[i].keyPart.size());
 			data += entries[i].keyPart;
 			data += std::string(Entry::KEYSIZELIMIT - entries[i].keyPart.size(), '\0');
