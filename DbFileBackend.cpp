@@ -8,6 +8,8 @@
 #include "Utils.h"
 #include "FileUtils.h"
 #include "Crc.h"
+
+#include <utility>
 #include <cstdio>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -45,23 +47,106 @@ static Return __db_fwrite(DbFileBackend& db, const std::string& d) {
 
 #define ChunkType_Tree 1
 #define ChunkType_Value 2
+#define ChunkType_FreeSpace 255 // not used/implemented currently
+
 
 struct DbFile_ValueChunk {
-	DbFile_ValueChunk() : selfOffset(0) {}
+	DbFile_ValueChunk() : selfOffset(0), initialSize(0), refNextValueChunk(0), hasBeenWritten(false) {}
 	size_t selfOffset;
 	std::string data;
+	uint32_t initialSize;
+	uint64_t refNextValueChunk;
+	bool hasBeenWritten;
+	
+	Return appendData(DbFileBackend& db, const std::string& d) {		
+		if(!hasBeenWritten) {
+			if(refNextValueChunk != 0) return "appenddata: has not been written but refnext!=0";
+			data += d;
+			ASSERT( write(db) );
+			return true;
+		}
+
+		if(refNextValueChunk != 0) {
+			DbFile_ValueChunk chunk;
+			ASSERT( chunk.read(db, refNextValueChunk) );
+			return chunk.appendData(db, d);
+		}
+		
+		if(data.size() + d.size() <= initialSize) {
+			data += d;
+			ASSERT( write(db) );
+			return true;
+		}
+		
+		DbFile_ValueChunk chunk;
+		chunk.selfOffset = refNextValueChunk = db.fileSize;
+		ASSERT( write(db) ); // write because of new refNextValueChunk
+		return chunk.appendData(db, d);
+	}
+	
+	Return overwriteData(DbFileBackend& db, const std::string& d) {
+		if(!hasBeenWritten) {
+			data = d;
+			ASSERT( write(db) );
+			return true;
+		}
+		
+		if(d.size() <= initialSize) {
+			data = d;
+			refNextValueChunk = 0; // NOTE: loosing chunk ref here!
+			ASSERT( write(db) );
+			return true;
+		}
+		
+		data = d.substr(0, initialSize);
+		ASSERT( write(db) );
+
+		DbFile_ValueChunk chunk;
+		if(refNextValueChunk == 0) {
+			chunk.selfOffset = db.fileSize;
+			ASSERT( chunk.overwriteData(db, d.substr(initialSize)) );
+			refNextValueChunk = chunk.selfOffset;
+			ASSERT( write(db) ); // write again because of changed refNextValueChunk
+		} else {
+			ASSERT( chunk.read(db, refNextValueChunk) );
+			ASSERT( chunk.overwriteData(db, d.substr(initialSize)) );
+		}
+		
+		return true;
+	}
+	
+	Return getData(DbFileBackend& db, /*out*/std::string& d) {
+		if(refNextValueChunk == 0) { d = data; return true; }
+		DbFile_ValueChunk chunk;
+		ASSERT( chunk.read(db, refNextValueChunk) );
+		std::string nextData;
+		ASSERT( chunk.getData(db, nextData) );
+		d = data + nextData;
+		return true;
+	}
 	
 	Return write(DbFileBackend& db) {
+		if(!hasBeenWritten) {
+			initialSize = data.size();
+			hasBeenWritten = true;
+		}
 		ASSERT( __db_fseek(db, selfOffset) );
 		ASSERT( __db_fwrite(db, rawString<uint8_t>(ChunkType_Value)) );
 		ASSERT( __db_fwrite(db, rawString<uint32_t>(data.size())) );
 		ASSERT( __db_fwrite(db, data) );
-		ASSERT( __db_fwrite(db, rawString<uint32_t>(calc_crc(data))) );
+		ASSERT( __db_fwrite(db, rawString<uint32_t>(initialSize)) );		
+		ASSERT( __db_fwrite(db, rawString<uint64_t>(refNextValueChunk)) );		
+		ASSERT( __db_fwrite(db, rawString<uint32_t>(calc_crc(data,
+															 rawString<uint32_t>(initialSize) +
+															 rawString<uint64_t>(refNextValueChunk)
+															 ))) );
 		return true;
 	}
 	
-	Return read(DbFileBackend& db) {
-		ASSERT( __db_ftell(db, selfOffset) );
+	Return read(DbFileBackend& db, size_t _selfOffset) {
+		selfOffset = _selfOffset;
+		hasBeenWritten = true;
+		ASSERT( __db_fseek(db, selfOffset) );
 		
 		uint8_t chunkType = 0;
 		ASSERT( fread_bigendian<uint8_t>(db.file, chunkType) );
@@ -73,10 +158,15 @@ struct DbFile_ValueChunk {
 		data = std::string('\0', len);
 		ASSERT( fread_bytes(db.file, &data[0], data.size()) );
 		
+		ASSERT( fread_bigendian<uint32_t>(db.file, initialSize) );
+		if(initialSize < len) return "ValueChunk read: initialSize invalid";
+		
+		ASSERT( fread_bigendian<uint64_t>(db.file, refNextValueChunk) );
+
 		uint32_t crc = 0;
 		ASSERT( fread_bigendian<uint32_t>(db.file, crc) );
 		
-		if(crc != calc_crc(data))
+		if(crc != calc_crc(data, rawString<uint32_t>(initialSize) + rawString<uint64_t>(refNextValueChunk)))
 			return "CRC missmatch on ValueChunk read";
 		
 		return true;
@@ -84,33 +174,112 @@ struct DbFile_ValueChunk {
 };
 
 struct DbFile_TreeChunk {
-	DbFile_TreeChunk() : selfOffset(0) {}
+	DbFile_TreeChunk() : selfOffset(0), parent(NULL) {}
 	size_t selfOffset;
+	DbFile_TreeChunk* parent;
 	
 	static const short NUM_ENTRIES = 8;
 	struct Entry {
-		std::string key;
+		static const size_t KEYSIZELIMIT = 4;
 		enum { ET_None=0, ET_Subtree=1, ET_Value=2 } type;
+		std::string keyPart;
 		uint64_t ref;
 		Entry() : type(ET_None), ref(0) {}
-		bool operator<(const Entry& o) const { return key < o.key; }
+		bool operator<(const Entry& o) const { return std::make_pair(int(type),keyPart) < std::make_pair(int(o.type),o.keyPart); }
 	};
 	Entry entries[NUM_ENTRIES];
 	
-	Return getValue(const std::string& key, /*out*/DbFile_ValueChunk& value, bool createIfNotExist = true) {
+	int countNonEmptyEntries() {
+		int count = 0;
+		for(short i = 0; i < NUM_ENTRIES; ++i)
+			if(entries[i].type != Entry::ET_None)
+				count++;
+		return count;
+	}
+	
+	Return insert(DbFileBackend& db, const Entry& entry) {
+		short index = 0;
+		while(true) {
+			if(entries[index].type == Entry::ET_None) break;
+			index++;
+			if(index >= NUM_ENTRIES) {
+				// we are full. we must split
+			}
+		}
+	}
+	
+	Return createNewHere(DbFileBackend& db, const std::string& keyPart, /*out*/DbFile_ValueChunk& value) {
+		Entry entry;
+		if(keyPart.size() > Entry::KEYSIZELIMIT) {
+			DbFile_TreeChunk subtree;
+			subtree.parent = this;
+			subtree.selfOffset = db.fileSize;
+			ASSERT( subtree.write(db) );			
+			
+			entry.type = Entry::ET_Subtree;
+			entry.keyPart = keyPart.substr(0, Entry::KEYSIZELIMIT);
+			entry.ref = subtree.selfOffset;			
+			ASSERT( insert(db, entry) );
+			
+			return subtree.createNewHere(db, keyPart.substr(Entry::KEYSIZELIMIT), value);
+		}
+		entry.type = Entry::ET_Value;
+		entry.keyPart = keyPart;
+		entry.ref = value.selfOffset = db.fileSize;
+		return insert(db, entry);
+	}
+	
+	Return getValue(DbFileBackend& db, const std::string& key, /*out*/DbFile_ValueChunk& value,
+					bool createIfNotExist = true, bool mustCreateNew = false) {
+		bool haveValues = false, haveSubtrees = false;
+		short index = 0;
+		for(; index < NUM_ENTRIES; ++index) {
+			haveValues |= (entries[0].type == Entry::ET_Value);
+			haveSubtrees |= (entries[0].type == Entry::ET_Subtree);
+			int comp = key.compare(entries[index].keyPart);
+			if(comp > 0) {
+				if(index == 0) {
+					// It means we must be at the leaf.
+					if(!haveValues) return "order inconsistent; expected value";
+					if(!createIfNotExist) return "entry not found";
+					return createNewHere(db, key, value);
+				}
+				break;
+			}
+		}
+		--index; // go back to the last element which is <= the key
+
+		if(entries[index].keyPart == key && entries[index].type == Entry::ET_Value) {
+			// found it!
+			if(mustCreateNew) return "entry does already exist";
+			ASSERT( value.read(db, entries[index].ref) );
+			return true;
+		}
 		
+		if((entries[index].keyPart == key && entries[index].type == Entry::ET_Subtree)
+		   || countNonEmptyEntries() == NUM_ENTRIES) {
+			// we must/should go down
+			DbFile_TreeChunk subtree;
+			subtree.parent = this;
+			ASSERT( subtree.read(db, entries[index].ref) );
+			return subtree.getValue(db, key, value, createIfNotExist, mustCreateNew);
+		}
+				
+		// We don't have it and we are at the leaf.			
+		if(!createIfNotExist) return "entry not found";
+		return createNewHere(db, key, value);
 	}
 	
 	uint8_t typesBitfield() {
 		uint8_t types = 0;		
-		for(int i = 0; i < NUM_ENTRIES; ++i)
+		for(short i = 0; i < NUM_ENTRIES; ++i)
 			if(entries[i].type == Entry::ET_Value)
 				types |= uint8_t(1) << i;
 		return types;
 	}
 	
 	void setFromTypesBitfield(uint8_t types) {
-		for(int i = 0; i < NUM_ENTRIES; ++i)
+		for(short i = 0; i < NUM_ENTRIES; ++i)
 			if(entries[i].type == Entry::ET_Value) {
 				if(types & (uint8_t(1) << i))
 					entries[i].type = Entry::ET_Value;
@@ -127,25 +296,23 @@ struct DbFile_TreeChunk {
 		data += rawString<uint8_t>(typesBitfield());
 		for(short i = 0; i < NUM_ENTRIES; ++i)
 			data += rawString<uint64_t>(entries[i].ref);
-
-		uint16_t offset = 0;
+		
 		for(short i = 0; i < NUM_ENTRIES; ++i) {
-			if(entries[i].key.size() >= 255) return "entry key size too big";
-			offset += entries[i].key.size();
-			data += rawString<uint16_t>(offset);
+			if(entries[i].keyPart.size() >= Entry::KEYSIZELIMIT) return "entry keyPart size too big";
+			data += rawString<uint8_t>(entries[i].keyPart.size());
+			data += entries[i].keyPart;
+			data += std::string('\0', Entry::KEYSIZELIMIT - entries[i].keyPart.size());
 		}
 		
-		for(short i = 0; i < NUM_ENTRIES; ++i)
-			data += entries[i].key;
-
 		data += rawString<uint32_t>(calc_crc(data));
 		data = rawString<uint32_t>(data.size() - sizeof(uint32_t)) + data;
 		
 		return __db_fwrite(db, data);
 	}
 	
-	Return read(DbFileBackend& db) {
-		ASSERT( __db_ftell(db, selfOffset) );
+	Return read(DbFileBackend& db, size_t _selfOffset) {
+		selfOffset = _selfOffset;
+		ASSERT( __db_fseek(db, selfOffset) );
 
 		uint8_t chunkType = 0;
 		ASSERT( fread_bigendian<uint8_t>(db.file, chunkType) );
@@ -153,8 +320,8 @@ struct DbFile_TreeChunk {
 		
 		size_t len = 0;
 		ASSERT( fread_bigendian<uint32_t>(db.file, len) );
-		if(len < sizeof(uint8_t) + NUM_ENTRIES*(sizeof(uint64_t) + sizeof(uint16_t)))
-			return "TreeChunk data too small";
+		if(len != /*types*/sizeof(uint8_t) + NUM_ENTRIES*(/*refs*/sizeof(uint64_t) + /*keysize*/sizeof(uint8_t) + /*key*/Entry::KEYSIZELIMIT))
+			return "TreeChunk data size missmatch";
 		
 		std::string data('\0', len);
 		ASSERT( fread_bytes(db.file, &data[0], data.size()) );
@@ -176,25 +343,13 @@ struct DbFile_TreeChunk {
 				entries[i].type = Entry::ET_None;
 		}
 		
-		uint16_t offsets[NUM_ENTRIES];
 		for(short i = 0; i < NUM_ENTRIES; ++i) {
-			offsets[i] = valueFromRaw<uint16_t>(&data[offset]);
-			offset += sizeof(uint16_t);
-		}
-		
-		for(short i = 0; i < NUM_ENTRIES; ++i) {
-			uint16_t keysize = offsets[i];
-			if(i > 0) {
-				if(offsets[i] < offsets[i-1])
-					return "TreeChunk key offset data inconsistent (offsets not in order)";
-				keysize -= offsets[i-1];
-			}
-			entries[i].key = data.substr(offset, keysize);
-			offset += keysize;
-			if(offset > data.size())
-				return "TreeChunk key offset data inconsistent (go beyond the scope)";
-			if(entries[i].key.empty())
-				entries[i].type = Entry::ET_None;
+			uint8_t keysize = valueFromRaw<uint8_t>(&data[offset]);
+			offset += sizeof(uint8_t);
+			if(keysize > Entry::KEYSIZELIMIT)
+				return "TreeChunk key size invalid";
+			entries[i].keyPart = data.substr(offset, keysize);
+			offset += Entry::KEYSIZELIMIT;
 			if(i > 0 && entries[i].type != Entry::ET_None) {
 				if(!(entries[i-1] < entries[i]))
 					return "TreeChunk keys inconsistent (not in order)";
@@ -253,7 +408,7 @@ Return DbFileBackend::init() {
 		if(memcpy(tmp, DbFile_Signature, sizeof(tmp)) != 0)
 			return "DB file signature wrong";
 		
-		ASSERT_EXT( rootChunk->read(*this), "error reading root chunk" );
+		ASSERT_EXT( rootChunk->read(*this, TreeRootOffset), "error reading root chunk" );
 	}
 	
 	return true;
@@ -262,27 +417,39 @@ Return DbFileBackend::init() {
 // creates or append to an entry
 static Return __db_append(DbFileBackend& db, const std::string& key, const std::string& value) {
 	if(db.rootChunk == NULL) return "db append: db not initialized";
-	// TODO ...
-	return false;
+
+	DbFile_ValueChunk chunk;
+	ASSERT( db.rootChunk->getValue(db, key, chunk, /*createIfNotExist*/true, /*mustCreateNew*/false) );
+	ASSERT( chunk.appendData(db, value) );
+	return true;
 }
 
 static Return __db_set(DbFileBackend& db, const std::string& key, const std::string& value) {
 	if(db.rootChunk == NULL) return "db set: db not initialized";
-	// TODO ...
-	return false;
+
+	DbFile_ValueChunk chunk;
+	ASSERT( db.rootChunk->getValue(db, key, chunk, /*createIfNotExist*/true, /*mustCreateNew*/false) );
+	ASSERT( chunk.overwriteData(db, value) );
+	return true;
 }
 
 static Return __db_get(DbFileBackend& db, const std::string& key, /*out*/ std::string& value) {
 	if(db.rootChunk == NULL) return "db get: db not initialized";
-	// TODO ...
-	return false;
+
+	DbFile_ValueChunk chunk;
+	ASSERT( db.rootChunk->getValue(db, key, chunk, /*createIfNotExist*/false, /*mustCreateNew*/false) );
+	ASSERT( chunk.getData(db, value) );
+	return true;
 }
 
 // adds. if it exists, it fails
 static Return __db_add(DbFileBackend& db, const std::string& key, const std::string& value) {
 	if(db.rootChunk == NULL) return "db add: db not initialized";
-	// TODO ...
-	return false;
+
+	DbFile_ValueChunk chunk;
+	ASSERT( db.rootChunk->getValue(db, key, chunk, /*createIfNotExist*/true, /*mustCreateNew*/true) );
+	ASSERT( chunk.overwriteData(db, value) );
+	return true;
 }
 
 
