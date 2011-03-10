@@ -17,7 +17,8 @@ struct DbFileBackend : DbIntf {
 	std::string filename;
 	bool readonly;
 	
-	DbFileBackend(const std::string& dbfilename = "db.pngdb", bool ro = false) : filename(dbfilename), readonly(ro) {}
+	DbFileBackend(const std::string& dbfilename = "db.pngdb", bool ro = false)
+	: file(NULL), rootChunk(NULL), fileSize(0), filename(dbfilename), readonly(ro) {}
 	~DbFileBackend() { reset(); }
 	void reset();
 	Return setReadOnly(bool ro) { readonly = ro; return true; }
