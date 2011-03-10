@@ -186,7 +186,8 @@ struct DbFile_TreeChunk {
 		std::string keyPart;
 		uint64_t ref;
 		Entry() : type(ET_None), ref(0) {}
-		bool operator<(const Entry& o) const { return std::make_pair(keyPart,int(type)) < std::make_pair(o.keyPart,int(o.type)); }
+		bool operator<(const Entry& o) const { return std::make_pair(int(type),keyPart) < std::make_pair(int(o.type),o.keyPart); }
+		bool operator==(const Entry& o) const { return type == o.type && keyPart == o.keyPart; }
 	};
 	Entry entries[NUM_ENTRIES];
 	
@@ -207,6 +208,8 @@ struct DbFile_TreeChunk {
 	}
 	
 	Return __splitIfNeeded(DbFileBackend& db) {
+		if(firstFreeEntryIndex() >= 0) return true; // no need to split
+		
 		// we are full. we must split
 		DbFile_TreeChunk newSub;
 		// take the last half. because they are ordered, we don't need to resort them
@@ -238,24 +241,46 @@ struct DbFile_TreeChunk {
 		return true;
 	}
 	
+	short __subtreeWithKeyStart(const std::string& keyPart) {
+		for(short i = 0; i < NUM_ENTRIES; ++i)
+			if(entries[i].type == Entry::ET_Subtree && entries[i].keyPart.substr(0,keyPart.size()) == keyPart)
+				return i;
+		return -1;
+	}
+	
+	short __bestKeySize(const std::string& keyPart) {
+		short keySize = 1;
+		if(countNonEmptyEntries() <= 2) keySize = 4;
+		else if(countNonEmptyEntries() <= 4) keySize = 2;
+
+		while(true) { // we are expecting in this loop that there isn't a same key already
+			short index = __subtreeWithKeyStart(keyPart.substr(0,keySize));
+			if(index < 0) break;
+			keySize = entries[index].keyPart.size();
+		}
+		
+		return keySize;
+	}
+	
 	Return __createNewHere(DbFileBackend& db, const std::string& keyPart, /*out*/DbFile_ValueChunk& value) {
-		Entry entry;
 		if(keyPart.size() > Entry::KEYSIZELIMIT) {
 			DbFile_TreeChunk subtree;
 			subtree.parent = this;
 			subtree.selfOffset = db.fileSize;
 			ASSERT( subtree.write(db) );			
 			
-			entry.type = Entry::ET_Subtree;
-			entry.keyPart = keyPart.substr(0, Entry::KEYSIZELIMIT/2);
-			entry.ref = subtree.selfOffset;
 			ASSERT( __splitIfNeeded(db) );
+			Entry entry;
+			entry.type = Entry::ET_Subtree;			
+			entry.keyPart = keyPart.substr(0, __bestKeySize(keyPart));
+			entry.ref = subtree.selfOffset;
 			ASSERT( __insert(db, entry) );
 			
 			return subtree.__createNewHere(db, keyPart.substr(entry.keyPart.size()), value);
 		}
 		
 		ASSERT( __splitIfNeeded(db) );
+		Entry entry;
 		entry.type = Entry::ET_Value;
 		entry.keyPart = keyPart;
 		entry.ref = value.selfOffset = db.fileSize;
@@ -266,9 +291,7 @@ struct DbFile_TreeChunk {
 					bool createIfNotExist = true, bool mustCreateNew = false) {
 		short lastTreeIndex = -1;
 		for(short i = 0; i < NUM_ENTRIES; ++i) {
-			int comp = key.substr(0,entries[i].keyPart.size()).compare(entries[i].keyPart);
-			if(comp > 0) break;
-			if(comp == 0) {
+			if(key.substr(0,entries[i].keyPart.size()) == entries[i].keyPart) {
 				switch(entries[i].type) {
 					case Entry::ET_None: break;
 					case Entry::ET_Value:
@@ -286,16 +309,16 @@ struct DbFile_TreeChunk {
 			}
 		}
 
-		if(lastTreeIndex >= 0) {
-			// we must/should go down
-			DbFile_TreeChunk subtree;
-			subtree.parent = this;
-			ASSERT( subtree.read(db, entries[lastTreeIndex].ref) );
-			return subtree.getValue(db, key.substr(entries[lastTreeIndex].keyPart.size()), value, createIfNotExist, mustCreateNew);
+		if(lastTreeIndex < 0) {
+			if(!createIfNotExist) return "entry not found";
+			return __createNewHere(db, key, value);
 		}
 		
-		if(!createIfNotExist) return "entry not found";
-		return __createNewHere(db, key, value);
+		// we must/should go down
+		DbFile_TreeChunk subtree;
+		subtree.parent = this;
+		ASSERT( subtree.read(db, entries[lastTreeIndex].ref) );
+		return subtree.getValue(db, key.substr(entries[lastTreeIndex].keyPart.size()), value, createIfNotExist, mustCreateNew);		
 	}
 	
 	uint8_t typesBitfield() {
@@ -376,7 +399,9 @@ struct DbFile_TreeChunk {
 				return "TreeChunk key size invalid";
 			entries[i].keyPart = data.substr(offset, keysize);
 			offset += Entry::KEYSIZELIMIT;
-			if(i > 0 && entries[i].type != Entry::ET_None) {
+			if(i > 0 && entries[i-1].type != Entry::ET_None) {
+				if(entries[i-1] == entries[i])
+					return "TreeChunk keys inconsistent (double entry)";
 				if(!(entries[i-1] < entries[i]))
 					return "TreeChunk keys inconsistent (not in order)";
 			}
@@ -450,7 +475,7 @@ Return DbFileBackend::init() {
 			return "DB file signature wrong";
 		
 		ASSERT_EXT( rootChunk->read(*this, TreeRootOffset), "error reading root chunk" );
-		ASSERT( rootChunk->debugDump(*this) );
+		//ASSERT( rootChunk->debugDump(*this) );
 	}
 	
 	return true;
