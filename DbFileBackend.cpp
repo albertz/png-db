@@ -222,9 +222,10 @@ struct DbFile_TreeChunk {
 		ASSERT( newSub.write(db) );
 		
 		// make ref. we know that we don't have such a keyPart yet because of how getValue() works
-		entries[0].type = Entry::ET_Subtree;
-		entries[0].keyPart = "";
-		entries[0].ref = newSub.selfOffset;
+		short index = firstFreeEntryIndex();
+		entries[index].type = Entry::ET_Subtree;
+		entries[index].keyPart = "";
+		entries[index].ref = newSub.selfOffset;
 		
 		// NOTE: Entries are unordered now. But we assume that we
 		// call __insert right after which does a resort and a write,
