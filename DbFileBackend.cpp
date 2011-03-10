@@ -156,7 +156,7 @@ struct DbFile_ValueChunk {
 		size_t len = 0;
 		ASSERT( fread_bigendian<uint32_t>(db.file, len) );
 		
-		data = std::string('\0', len);
+		data = std::string(len, '\0');
 		ASSERT( fread_bytes(db.file, &data[0], data.size()) );
 		
 		ASSERT( fread_bigendian<uint32_t>(db.file, initialSize) );
@@ -308,12 +308,10 @@ struct DbFile_TreeChunk {
 	
 	void setFromTypesBitfield(uint8_t types) {
 		for(short i = 0; i < NUM_ENTRIES; ++i)
-			if(entries[i].type == Entry::ET_Value) {
-				if(types & (uint8_t(1) << i))
-					entries[i].type = Entry::ET_Value;
-				else
-					entries[i].type = Entry::ET_Subtree;
-			}
+			if(types & (uint8_t(1) << i))
+				entries[i].type = Entry::ET_Value;
+			else
+				entries[i].type = Entry::ET_Subtree;
 	}
 	
 	Return write(DbFileBackend& db) {
@@ -351,7 +349,7 @@ struct DbFile_TreeChunk {
 		if(len != /*types*/sizeof(uint8_t) + NUM_ENTRIES*(/*refs*/sizeof(uint64_t) + /*keysize*/sizeof(uint8_t) + /*key*/Entry::KEYSIZELIMIT))
 			return "TreeChunk data size missmatch";
 		
-		std::string data('\0', len);
+		std::string data(len, '\0');
 		ASSERT( fread_bytes(db.file, &data[0], data.size()) );
 		
 		uint32_t crc = 0;
@@ -384,6 +382,21 @@ struct DbFile_TreeChunk {
 			}
 		}
 		
+		return true;
+	}
+	
+	Return debugDump(DbFileBackend& db, bool recursive = true, const std::string& prefix = "") {
+		cout << prefix << "TreeChunk @" << selfOffset << " {" << endl;
+		for(short i = 0; i < NUM_ENTRIES; ++i) {
+			cout << prefix << "  " << int(entries[i].type) << ":" << hexString(entries[i].keyPart) << ":" << entries[i].ref << endl;
+			if(recursive && entries[i].type == Entry::ET_Subtree) {
+				DbFile_TreeChunk subtree;
+				subtree.parent = this;
+				ASSERT( subtree.read(db, entries[i].ref) );
+				ASSERT( subtree.debugDump(db, true, prefix + "  ") );
+			}
+		}
+		cout << prefix << "}" << endl;
 		return true;
 	}
 };
@@ -437,6 +450,7 @@ Return DbFileBackend::init() {
 			return "DB file signature wrong";
 		
 		ASSERT_EXT( rootChunk->read(*this, TreeRootOffset), "error reading root chunk" );
+		ASSERT( rootChunk->debugDump(*this) );
 	}
 	
 	return true;
@@ -516,7 +530,7 @@ static Return __saveNewDbEntry(DbFileBackend& db, DbEntryId& id, const std::stri
 			id = newId;
 			return true;
 		}
-		cout << "__saveNewDbEntry: " << r.errmsg << endl;
+		//cout << "__saveNewDbEntry: " << r.errmsg << endl;
 	}
 	
 	id += (char)random();
