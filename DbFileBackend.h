@@ -7,10 +7,12 @@
 #define __AZ__DBFILEBACKEND_H__
 
 #include "Db.h"
+#include "Mutex.h"
 
 struct DbFile_TreeChunk;
 
 struct DbFileBackend : DbIntf {
+	Mutex mutex;
 	FILE* file;
 	DbFile_TreeChunk* rootChunk;
 	size_t fileSize;
