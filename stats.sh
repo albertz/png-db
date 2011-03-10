@@ -1,6 +1,6 @@
 #!/bin/zsh
 
-DBFILE=db.pngdb
+DBFILE=db.kch
 SRCDIR="$HOME/screenies"
 [ "$1" != "" ] && SCRDIR="$1"
 
