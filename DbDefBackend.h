@@ -6,8 +6,8 @@
 #ifndef __AZ_DBDEFBACKEND_H__
 #define __AZ_DBDEFBACKEND_H__
 
-#include "DbKyotoBackend.h"
+#include "DbFileBackend.h"
 
-typedef DbKyotoBackend DbDefBackend;
+typedef DbFileBackend DbDefBackend;
 
 #endif
