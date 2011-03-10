@@ -46,12 +46,14 @@
 		234A86841328D63C007EF26A /* test-png-dumpchunks.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = "test-png-dumpchunks.cpp"; sourceTree = "<group>"; };
 		234A86851328D63C007EF26A /* test-png-reader.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = "test-png-reader.cpp"; sourceTree = "<group>"; };
 		234A86861328D63C007EF26A /* Utils.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Utils.h; sourceTree = "<group>"; };
+		234A868713292AA7007EF26A /* stats.sh */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.sh; path = stats.sh; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
 		234A86251328D3C4007EF26A = {
 			isa = PBXGroup;
 			children = (
+				234A868713292AA7007EF26A /* stats.sh */,
 				234A86601328D63C007EF26A /* compile.sh */,
 				234A86611328D63C007EF26A /* Crc.cpp */,
 				234A86621328D63C007EF26A /* Crc.h */,
