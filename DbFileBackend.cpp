@@ -329,7 +329,7 @@ struct DbFile_TreeChunk {
 			if(entries[i].keyPart.size() >= Entry::KEYSIZELIMIT) return "entry keyPart size too big";
 			data += rawString<uint8_t>(entries[i].keyPart.size());
 			data += entries[i].keyPart;
-			data += std::string('\0', Entry::KEYSIZELIMIT - entries[i].keyPart.size());
+			data += std::string(Entry::KEYSIZELIMIT - entries[i].keyPart.size(), '\0');
 		}
 		
 		data += rawString<uint32_t>(calc_crc(data));
@@ -425,7 +425,7 @@ Return DbFileBackend::init() {
 	if(fileSize == 0) {
 		// init new file
 		ASSERT( __db_fwrite(*this, DbFile_Signature, sizeof(DbFile_Signature)) );
-		ASSERT( __db_ftell(*this, rootChunk->selfOffset) );
+		rootChunk->selfOffset = TreeRootOffset;
 		ASSERT( rootChunk->write(*this) );
 	}
 	else if(fileSize < sizeof(DbFile_Signature))
@@ -433,7 +433,7 @@ Return DbFileBackend::init() {
 	else {
 		char tmp[sizeof(DbFile_Signature)];
 		ASSERT( fread_bytes(file, tmp, sizeof(tmp)) );
-		if(memcpy(tmp, DbFile_Signature, sizeof(tmp)) != 0)
+		if(memcmp(tmp, DbFile_Signature, sizeof(tmp)) != 0)
 			return "DB file signature wrong";
 		
 		ASSERT_EXT( rootChunk->read(*this, TreeRootOffset), "error reading root chunk" );
@@ -511,10 +511,12 @@ static Return __saveNewDbEntry(DbFileBackend& db, DbEntryId& id, const std::stri
 		DbEntryId newId = id;
 		newId += (char)random();
 		std::string key = "data." + newId;
-		if(__db_add(db, key, content)) {
+		Return r = __db_add(db, key, content);
+		if(r) {
 			id = newId;
 			return true;
 		}
+		cout << "__saveNewDbEntry: " << r.errmsg << endl;
 	}
 	
 	id += (char)random();
