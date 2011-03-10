@@ -136,6 +136,8 @@ static Return __readBlock(DbPngEntryReader& png, const std::string& data) {
 			return "block entry too small (before reading block height)";
 		png.blockList.blockHeight = valueFromRaw<uint8_t>(&data[offset]);
 		offset += sizeof(uint8_t);
+		if(png.blockList.blockHeight == 0)
+			return "block height invalid";
 	}
 	
 	if(((data.size() - offset) % png.blockList.blockHeight) != 0)
