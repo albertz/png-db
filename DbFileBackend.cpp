@@ -485,6 +485,7 @@ Return DbFileBackend::init() {
 // creates or append to an entry
 static Return __db_append(DbFileBackend& db, const std::string& key, const std::string& value) {
 	if(db.rootChunk == NULL) return "db append: db not initialized";
+	ScopedLock lock(db.mutex);
 
 	DbFile_ValueChunk chunk;
 	ASSERT( db.rootChunk->getValue(db, key, chunk, /*createIfNotExist*/true, /*mustCreateNew*/false) );
@@ -494,6 +495,7 @@ static Return __db_append(DbFileBackend& db, const std::string& key, const std::
 
 static Return __db_set(DbFileBackend& db, const std::string& key, const std::string& value) {
 	if(db.rootChunk == NULL) return "db set: db not initialized";
+	ScopedLock lock(db.mutex);
 
 	DbFile_ValueChunk chunk;
 	ASSERT( db.rootChunk->getValue(db, key, chunk, /*createIfNotExist*/true, /*mustCreateNew*/false) );
@@ -503,6 +505,7 @@ static Return __db_set(DbFileBackend& db, const std::string& key, const std::str
 
 static Return __db_get(DbFileBackend& db, const std::string& key, /*out*/ std::string& value) {
 	if(db.rootChunk == NULL) return "db get: db not initialized";
+	ScopedLock lock(db.mutex);
 
 	DbFile_ValueChunk chunk;
 	ASSERT( db.rootChunk->getValue(db, key, chunk, /*createIfNotExist*/false, /*mustCreateNew*/false) );
@@ -513,6 +516,7 @@ static Return __db_get(DbFileBackend& db, const std::string& key, /*out*/ std::s
 // adds. if it exists, it fails
 static Return __db_add(DbFileBackend& db, const std::string& key, const std::string& value) {
 	if(db.rootChunk == NULL) return "db add: db not initialized";
+	ScopedLock lock(db.mutex);
 
 	DbFile_ValueChunk chunk;
 	ASSERT( db.rootChunk->getValue(db, key, chunk, /*createIfNotExist*/true, /*mustCreateNew*/true) );
@@ -564,7 +568,6 @@ static Return __saveNewDbEntry(DbFileBackend& db, DbEntryId& id, const std::stri
 }
 
 Return DbFileBackend::push(/*out*/ DbEntryId& id, const DbEntry& entry) {
-	ScopedLock lock(mutex);
 	if(!entry.haveSha1())
 		return "DB push: entry SHA1 not calculated";
 	if(!entry.haveCompressed())
@@ -599,7 +602,6 @@ Return DbFileBackend::push(/*out*/ DbEntryId& id, const DbEntry& entry) {
 }
 
 Return DbFileBackend::get(/*out*/ DbEntry& entry, const DbEntryId& id) {
-	ScopedLock lock(mutex);
 	std::string key = "data." + id;
 	ASSERT( __db_get(*this, key, entry.compressed) );
 	
@@ -610,7 +612,6 @@ Return DbFileBackend::get(/*out*/ DbEntry& entry, const DbEntryId& id) {
 }
 
 Return DbFileBackend::pushToDir(const std::string& path, const DbDirEntry& dirEntry) {
-	ScopedLock lock(mutex);
 	std::string key = "fs." + path;
 	std::string dirEntryRaw = dirEntry.serialized();
 	ASSERT( __addEntryToList(*this, key, dirEntryRaw) );
@@ -618,7 +619,6 @@ Return DbFileBackend::pushToDir(const std::string& path, const DbDirEntry& dirEn
 }
 
 Return DbFileBackend::getDir(/*out*/ std::list<DbDirEntry>& dirList, const std::string& path) {
-	ScopedLock lock(mutex);
 	std::string key = "fs." + path;
 	std::list<std::string> entries;
 	ASSERT( __getEntryList(*this, key, entries) );
@@ -629,14 +629,12 @@ Return DbFileBackend::getDir(/*out*/ std::list<DbDirEntry>& dirList, const std::
 }
 
 Return DbFileBackend::setFileRef(/*can be empty*/ const DbEntryId& id, const std::string& path) {
-	ScopedLock lock(mutex);
 	std::string key = "fs." + path;
 	ASSERT( __db_set(*this, key, id) );
 	return true;
 }
 
 Return DbFileBackend::getFileRef(/*out (can be empty)*/ DbEntryId& id, const std::string& path) {
-	ScopedLock lock(mutex);
 	std::string key = "fs." + path;
 	ASSERT( __db_get(*this, key, id) );
 	return true;
