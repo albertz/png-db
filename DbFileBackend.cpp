@@ -9,6 +9,7 @@
 #include "FileUtils.h"
 #include "Crc.h"
 
+#include <algorithm>
 #include <utility>
 #include <cstdio>
 #include <sys/types.h>
@@ -185,7 +186,7 @@ struct DbFile_TreeChunk {
 		std::string keyPart;
 		uint64_t ref;
 		Entry() : type(ET_None), ref(0) {}
-		bool operator<(const Entry& o) const { return std::make_pair(int(type),keyPart) < std::make_pair(int(o.type),o.keyPart); }
+		bool operator<(const Entry& o) const { return std::make_pair(keyPart,int(type)) < std::make_pair(o.keyPart,int(o.type)); }
 	};
 	Entry entries[NUM_ENTRIES];
 	
@@ -197,18 +198,47 @@ struct DbFile_TreeChunk {
 		return count;
 	}
 	
-	Return insert(DbFileBackend& db, const Entry& entry) {
-		short index = 0;
-		while(true) {
-			if(entries[index].type == Entry::ET_None) break;
-			index++;
-			if(index >= NUM_ENTRIES) {
-				// we are full. we must split
-			}
+	int firstFreeEntryIndex() {
+		for(short i = 0; i < NUM_ENTRIES; ++i) {
+			if(entries[i].type == Entry::ET_None)
+				return i;
 		}
+		return -1;
 	}
 	
-	Return createNewHere(DbFileBackend& db, const std::string& keyPart, /*out*/DbFile_ValueChunk& value) {
+	Return __splitIfNeeded(DbFileBackend& db) {
+		// we are full. we must split
+		DbFile_TreeChunk newSub;
+		// take the last half. because they are ordered, we don't need to resort them
+		for(short i = NUM_ENTRIES/2; i < NUM_ENTRIES; ++i) {
+			newSub.entries[i] = entries[i];
+			entries[i] = Entry(); // reset
+		}
+		newSub.parent = this;
+		newSub.selfOffset = db.fileSize;
+		ASSERT( newSub.write(db) );
+		
+		// make ref. we know that we don't have such a keyPart yet because of how getValue() works
+		entries[0].type = Entry::ET_Subtree;
+		entries[0].keyPart = "";
+		entries[0].ref = newSub.selfOffset;
+		
+		// NOTE: Entries are unordered now. But we assume that we
+		// call __insert right after which does a resort and a write,
+		// so it doesn't matter.
+		return true;
+	}
+	
+	Return __insert(DbFileBackend& db, const Entry& entry) {
+		short index = firstFreeEntryIndex();
+		if(index < 0) return "we asserted that we have a free entry index";
+		entries[index] = entry;
+		std::sort(&entries[0], &entries[NUM_ENTRIES]);
+		ASSERT( write(db) );
+		return true;
+	}
+	
+	Return __createNewHere(DbFileBackend& db, const std::string& keyPart, /*out*/DbFile_ValueChunk& value) {
 		Entry entry;
 		if(keyPart.size() > Entry::KEYSIZELIMIT) {
 			DbFile_TreeChunk subtree;
@@ -217,57 +247,55 @@ struct DbFile_TreeChunk {
 			ASSERT( subtree.write(db) );			
 			
 			entry.type = Entry::ET_Subtree;
-			entry.keyPart = keyPart.substr(0, Entry::KEYSIZELIMIT);
-			entry.ref = subtree.selfOffset;			
-			ASSERT( insert(db, entry) );
+			entry.keyPart = keyPart.substr(0, Entry::KEYSIZELIMIT/2);
+			entry.ref = subtree.selfOffset;
+			ASSERT( __splitIfNeeded(db) );
+			ASSERT( __insert(db, entry) );
 			
-			return subtree.createNewHere(db, keyPart.substr(Entry::KEYSIZELIMIT), value);
+			return subtree.__createNewHere(db, keyPart.substr(entry.keyPart.size()), value);
 		}
+		
+		ASSERT( __splitIfNeeded(db) );
 		entry.type = Entry::ET_Value;
 		entry.keyPart = keyPart;
 		entry.ref = value.selfOffset = db.fileSize;
-		return insert(db, entry);
+		return __insert(db, entry);
 	}
 	
 	Return getValue(DbFileBackend& db, const std::string& key, /*out*/DbFile_ValueChunk& value,
 					bool createIfNotExist = true, bool mustCreateNew = false) {
-		bool haveValues = false, haveSubtrees = false;
-		short index = 0;
-		for(; index < NUM_ENTRIES; ++index) {
-			haveValues |= (entries[0].type == Entry::ET_Value);
-			haveSubtrees |= (entries[0].type == Entry::ET_Subtree);
-			int comp = key.compare(entries[index].keyPart);
-			if(comp > 0) {
-				if(index == 0) {
-					// It means we must be at the leaf.
-					if(!haveValues) return "order inconsistent; expected value";
-					if(!createIfNotExist) return "entry not found";
-					return createNewHere(db, key, value);
+		short lastTreeIndex = -1;
+		for(short i = 0; i < NUM_ENTRIES; ++i) {
+			int comp = key.substr(0,entries[i].keyPart.size()).compare(entries[i].keyPart);
+			if(comp > 0) break;
+			if(comp == 0) {
+				switch(entries[i].type) {
+					case Entry::ET_None: break;
+					case Entry::ET_Value:
+						if(key == entries[i].keyPart) {
+							// found it!
+							if(mustCreateNew) return "entry does already exist";
+							ASSERT( value.read(db, entries[i].ref) );
+							return true;
+						}
+						break;
+					case Entry::ET_Subtree:
+						lastTreeIndex = i;
+						break;
 				}
-				break;
 			}
 		}
-		--index; // go back to the last element which is <= the key
 
-		if(entries[index].keyPart == key && entries[index].type == Entry::ET_Value) {
-			// found it!
-			if(mustCreateNew) return "entry does already exist";
-			ASSERT( value.read(db, entries[index].ref) );
-			return true;
-		}
-		
-		if((entries[index].keyPart == key && entries[index].type == Entry::ET_Subtree)
-		   || countNonEmptyEntries() == NUM_ENTRIES) {
+		if(lastTreeIndex >= 0) {
 			// we must/should go down
 			DbFile_TreeChunk subtree;
 			subtree.parent = this;
-			ASSERT( subtree.read(db, entries[index].ref) );
-			return subtree.getValue(db, key, value, createIfNotExist, mustCreateNew);
+			ASSERT( subtree.read(db, entries[lastTreeIndex].ref) );
+			return subtree.getValue(db, key.substr(entries[lastTreeIndex].keyPart.size()), value, createIfNotExist, mustCreateNew);
 		}
-				
-		// We don't have it and we are at the leaf.			
+		
 		if(!createIfNotExist) return "entry not found";
-		return createNewHere(db, key, value);
+		return __createNewHere(db, key, value);
 	}
 	
 	uint8_t typesBitfield() {
